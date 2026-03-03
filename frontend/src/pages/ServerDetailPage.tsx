@@ -1,0 +1,250 @@
+import { useCallback } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ConsoleView } from '@/components/console/ConsoleView'
+import { BackupList } from '@/components/backups/BackupList'
+import { FileBrowser } from '@/components/files'
+import { ServerSettingsTab } from '@/components/settings/ServerSettingsTab'
+import {
+  ArrowLeft,
+  Play,
+  Square,
+  MoreVertical,
+  Trash2,
+  Terminal,
+  Archive,
+  FolderOpen,
+  Settings,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useServers } from '@/hooks/useServers'
+import { useStartServer, useStopServer, useDeleteServer } from '@/hooks/useServerActions'
+
+function getStatusBadge(state: string) {
+  switch (state) {
+    case 'running':
+      return <Badge variant="success">Running</Badge>
+    case 'starting':
+      return <Badge variant="warning">Starting</Badge>
+    case 'stopping':
+      return <Badge variant="warning">Stopping</Badge>
+    case 'crashed':
+      return <Badge variant="destructive">Crashed</Badge>
+    default:
+      return <Badge variant="secondary">Stopped</Badge>
+  }
+}
+
+export function ServerDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const tab = searchParams.get('tab') || 'console'
+  const { data: servers = [] } = useServers()
+  const server = servers.find((s) => s.id === id)
+
+  const startServer = useStartServer()
+  const stopServer = useStopServer()
+  const deleteServerMutation = useDeleteServer()
+
+  const setTab = useCallback(
+    (value: string) => {
+      setSearchParams({ tab: value })
+    },
+    [setSearchParams]
+  )
+
+  const handleServerAction = (action: 'start' | 'stop' | 'delete') => {
+    if (!server) return
+
+    switch (action) {
+      case 'start':
+        startServer.mutate(server.id)
+        break
+      case 'stop':
+        stopServer.mutate(server.id)
+        break
+      case 'delete':
+        deleteServerMutation.mutate(server.id)
+        navigate('/servers')
+        break
+    }
+  }
+
+  if (!server) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <h2 className="text-lg font-medium text-foreground">Server not found</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            The server you're looking for doesn't exist
+          </p>
+          <Button variant="secondary" className="mt-4" onClick={() => navigate('/servers')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to servers
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const isRunning = server.status.state === 'running'
+  const isBusy = server.status.state === 'starting' || server.status.state === 'stopping'
+
+  const handleDelete = () => {
+    if (confirm('Are you sure you want to delete this server? All data will be lost.')) {
+      handleServerAction('delete')
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-border bg-background">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/servers')}
+                className="text-muted-foreground"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Servers
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    'h-2.5 w-2.5 rounded-full',
+                    server.status.state === 'running' && 'bg-green-500 status-pulse',
+                    server.status.state === 'starting' && 'bg-yellow-500',
+                    server.status.state === 'stopping' && 'bg-yellow-500',
+                    server.status.state === 'crashed' && 'bg-red-500',
+                    server.status.state === 'stopped' && 'bg-muted-foreground'
+                  )}
+                />
+                <h1 className="text-lg font-semibold text-foreground">{server.name}</h1>
+                {getStatusBadge(server.status.state)}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isRunning ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleServerAction('stop')}
+                  disabled={isBusy}
+                >
+                  <Square className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              ) : (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleServerAction('start')}
+                  disabled={isBusy}
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Start
+                </Button>
+              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" size="sm">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="text-muted-foreground">
+                    <span className="capitalize">{server.type}</span>
+                    <span className="mx-1.5">·</span>
+                    <span>{server.version}</span>
+                    <span className="mx-1.5">·</span>
+                    <span>:{server.port}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={handleDelete}
+                    disabled={isRunning || isBusy}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Server
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <Tabs value={tab} onValueChange={setTab} className="mt-4">
+            <TabsList className="bg-transparent border-b-0 p-0 h-auto gap-4">
+              <TabsTrigger
+                value="console"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent rounded-none px-1 pb-2"
+              >
+                <Terminal className="h-4 w-4 mr-2" />
+                Console
+              </TabsTrigger>
+              <TabsTrigger
+                value="backups"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent rounded-none px-1 pb-2"
+              >
+                <Archive className="h-4 w-4 mr-2" />
+                Backups
+              </TabsTrigger>
+              <TabsTrigger
+                value="files"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent rounded-none px-1 pb-2"
+              >
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Files
+              </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent rounded-none px-1 pb-2"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        <Tabs value={tab} className="h-full">
+          <TabsContent value="console" className="h-full m-0 p-0">
+            <ConsoleView serverId={server.id} serverName={server.name} isRunning={isRunning} />
+          </TabsContent>
+          <TabsContent value="backups" className="h-full m-0 overflow-auto">
+            <BackupList serverId={server.id} serverName={server.name} />
+          </TabsContent>
+          <TabsContent value="files" className="h-full m-0 overflow-hidden">
+            <FileBrowser serverId={server.id} serverName={server.name} />
+          </TabsContent>
+          <TabsContent value="settings" className="h-full m-0 overflow-auto">
+            <ServerSettingsTab serverId={server.id} isRunning={isRunning} />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}

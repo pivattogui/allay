@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- 3D Cube - isometric -->
+  <!-- Top face -->
+  <path d="M16 4L28 11L16 18L4 11Z" fill="#ffffff"/>
+  <!-- Left face -->
+  <path d="M4 11L16 18V28L4 21Z" fill="#ffffff" opacity="0.7"/>
+  <!-- Right face -->
+  <path d="M28 11L16 18V28L28 21Z" fill="#ffffff" opacity="0.5"/>
+</svg>
