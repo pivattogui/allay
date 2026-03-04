@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
 import { Readable } from 'node:stream';
 import { eq } from 'drizzle-orm';
@@ -18,6 +18,16 @@ import { importManager, ImportError } from '../modules/import/index.js';
 import { ApplyChangesSchema } from '../modules/import/types.js';
 import { processManager } from '../modules/process/index.js';
 import type { JwtPayload } from '../types/index.js';
+import {
+  ListDirBody,
+  ListDirResponse,
+  WriteFileBody,
+  RenameBody,
+  RenameResponse,
+  ImportDiffBody,
+  ImportApplyBody,
+} from '../schemas/files.js';
+import { ErrorResponse } from '../schemas/common.js';
 
 export interface FileEntry {
   name: string;
@@ -35,7 +45,7 @@ const getServer = async (id: string) => {
   return server ?? null;
 };
 
-export const filesRoutes = new Elysia({ prefix: '/api/servers' })
+export const filesRoutes = new Elysia({ prefix: '/api/servers', detail: { tags: ['files'] } })
   .use(jwt({ name: 'jwt', secret: config.jwt.secret, exp: config.jwt.expiresIn }))
   .resolve(async ({ jwt: jwtPlugin, headers, set }) => {
     const auth = headers.authorization;
@@ -110,10 +120,25 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
     });
 
     return { path: resolved.relativePath || '/', entries };
+  }, {
+    params: t.Object({
+      id: t.String({ description: 'Server ID' }),
+    }),
+    body: ListDirBody,
+    response: {
+      200: ListDirResponse,
+      400: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'List directory contents',
+      description: 'List files and directories in a server directory',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/files/read/*', async ({ params, query, set }) => {
-    const { id } = params;
-    const relativePath = params['*'] || '';
+    const { id } = params as { id: string; '*': string };
+    const relativePath = (params as { id: string; '*': string })['*'] || '';
     const encoding = (query as Record<string, string>).encoding === 'base64' ? 'base64' : 'utf8';
 
     const server = await getServer(id);
@@ -172,10 +197,19 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       set.status = 500;
       return { error: 'Failed to read file', code: 'READ_ERROR' };
     }
+  }, {
+    query: t.Object({
+      encoding: t.Optional(t.Union([t.Literal('utf8'), t.Literal('base64')], { description: 'File encoding (default: utf8)' })),
+    }),
+    detail: {
+      summary: 'Read file contents',
+      description: 'Read the contents of a file from the server. Path after /read/ is the file path.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .put('/:id/files/write/*', async ({ params, body, set }) => {
-    const { id } = params;
-    const relativePath = params['*'] || '';
+    const { id } = params as { id: string; '*': string };
+    const relativePath = (params as { id: string; '*': string })['*'] || '';
     const { content } = (body || {}) as { content: string };
 
     if (typeof content !== 'string') {
@@ -212,10 +246,17 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       set.status = 500;
       return { error: 'Failed to write file', code: 'WRITE_ERROR' };
     }
+  }, {
+    body: WriteFileBody,
+    detail: {
+      summary: 'Write file contents',
+      description: 'Create or overwrite a file with new content. Path after /write/ is the file path.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/files/mkdir/*', async ({ params, set }) => {
-    const { id } = params;
-    const relativePath = params['*'] || '';
+    const { id } = params as { id: string; '*': string };
+    const relativePath = (params as { id: string; '*': string })['*'] || '';
 
     if (!relativePath) {
       set.status = 400;
@@ -246,10 +287,16 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       set.status = 500;
       return { error: 'Failed to create directory', code: 'MKDIR_ERROR' };
     }
+  }, {
+    detail: {
+      summary: 'Create directory',
+      description: 'Create a new directory in the server file system. Path after /mkdir/ is the directory path.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .delete('/:id/files/*', async ({ params, set }) => {
-    const { id } = params;
-    const relativePath = params['*'] || '';
+    const { id } = params as { id: string; '*': string };
+    const relativePath = (params as { id: string; '*': string })['*'] || '';
 
     if (!relativePath) {
       set.status = 400;
@@ -281,6 +328,12 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       set.status = 500;
       return { error: 'Failed to delete', code: 'DELETE_ERROR' };
     }
+  }, {
+    detail: {
+      summary: 'Delete file or directory',
+      description: 'Delete a file or directory from the server file system. Path after /files/ is the target path.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/files/rename', async ({ params, body, set }) => {
     const { id } = params;
@@ -330,10 +383,26 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       set.status = 500;
       return { error: 'Failed to rename', code: 'RENAME_ERROR' };
     }
+  }, {
+    params: t.Object({
+      id: t.String({ description: 'Server ID' }),
+    }),
+    body: RenameBody,
+    response: {
+      200: RenameResponse,
+      400: ErrorResponse,
+      404: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Rename file or directory',
+      description: 'Rename or move a file or directory within the server file system',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/files/download/*', async ({ params, set }) => {
-    const { id } = params;
-    const relativePath = params['*'] || '';
+    const { id } = params as { id: string; '*': string };
+    const relativePath = (params as { id: string; '*': string })['*'] || '';
 
     const server = await getServer(id);
     if (!server) {
@@ -363,9 +432,15 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
     set.headers['Content-Disposition'] = `attachment; filename="${filename}"`;
     set.headers['Content-Length'] = String(stat.size);
     return Bun.file(resolved.fullPath);
+  }, {
+    detail: {
+      summary: 'Download file',
+      description: 'Download a file from the server as binary data. Path after /download/ is the file path.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/files/upload', async ({ params, query, request, set }) => {
-    const { id } = params;
+    const { id } = params as { id: string };
     const targetPath = (query as Record<string, string>).path || '';
 
     const server = await getServer(id);
@@ -415,9 +490,18 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       set.status = 500;
       return { error: 'Failed to upload files', code: 'UPLOAD_ERROR' };
     }
+  }, {
+    query: t.Object({
+      path: t.Optional(t.String({ description: 'Target directory path (default: root)' })),
+    }),
+    detail: {
+      summary: 'Upload files',
+      description: 'Upload one or more files to a server directory',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/files/import/upload', async ({ params, request, set }) => {
-    const { id } = params;
+    const { id } = params as { id: string };
 
     const server = await getServer(id);
     if (!server) {
@@ -450,9 +534,15 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       }
       throw err;
     }
+  }, {
+    detail: {
+      summary: 'Upload backup for import',
+      description: 'Upload a backup archive (.tar.gz or .zip) for importing into a server',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/files/import/:tempFileId/metadata', async ({ params, set }) => {
-    const { id, tempFileId } = params;
+    const { id, tempFileId } = params as { id: string; tempFileId: string };
 
     const server = await getServer(id);
     if (!server) {
@@ -467,9 +557,15 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
     }
 
     return { metadata };
+  }, {
+    detail: {
+      summary: 'Get import metadata',
+      description: 'Get detected metadata from an uploaded backup archive',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/files/import/diff', async ({ params, body, set }) => {
-    const { id } = params;
+    const { id } = params as { id: string };
     const { tempFileId } = (body || {}) as { tempFileId: string };
 
     const server = await getServer(id);
@@ -493,9 +589,16 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       }
       throw err;
     }
+  }, {
+    body: ImportDiffBody,
+    detail: {
+      summary: 'Generate import diff',
+      description: 'Compare uploaded backup with current server files to show differences',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/files/import/apply', async ({ params, body, set }) => {
-    const { id } = params;
+    const { id } = params as { id: string };
     const { tempFileId, selections } = (body || {}) as {
       tempFileId: string;
       selections: Array<{ id: string; action: 'keep' | 'use-backup' }>;
@@ -540,9 +643,16 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
       }
       throw err;
     }
+  }, {
+    body: ImportApplyBody,
+    detail: {
+      summary: 'Apply import changes',
+      description: 'Apply selected changes from backup import to the server (server must be stopped)',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .delete('/:id/files/import/:tempFileId', async ({ params, set }) => {
-    const { id, tempFileId } = params;
+    const { id, tempFileId } = params as { id: string; tempFileId: string };
 
     const server = await getServer(id);
     if (!server) {
@@ -552,4 +662,10 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers' })
 
     await importManager.cleanup(tempFileId);
     return { success: true };
+  }, {
+    detail: {
+      summary: 'Cleanup import files',
+      description: 'Delete temporary import files and cleanup resources',
+      security: [{ bearerAuth: [] }],
+    },
   });

@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import { eq, ne, and, desc } from 'drizzle-orm';
@@ -16,11 +16,34 @@ import {
   type Server,
 } from '../types/index.js';
 import type { JwtPayload } from '../types/index.js';
+import {
+  CreateServerBody,
+  UpdateServerBody,
+  UpdateServerConfigBody,
+  ListServersResponse,
+  ServerResponse,
+  StatusResponse,
+  LogsResponse,
+  CommandBody,
+  CommandResponse,
+  PropertiesResponse,
+  PropertiesBody,
+  RawPropertiesResponse,
+  RawPropertiesBody,
+  NeedsRestartResponse,
+  ConfigResponse,
+  ConfigUpdateResponse,
+  IconResponse,
+  MigrateBody,
+  MigrateResponse,
+  ActionResponse,
+} from '../schemas/servers.js';
+import { ErrorResponse, MessageResponse, IdParam } from '../schemas/common.js';
 import sharp from 'sharp';
 import path from 'node:path';
 import fs from 'node:fs';
 
-export const serversRoutes = new Elysia({ prefix: '/api/servers' })
+export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags: ['servers'] } })
   .use(jwt({ name: 'jwt', secret: config.jwt.secret, exp: config.jwt.expiresIn }))
   .resolve(async ({ jwt: jwtPlugin, headers, set }) => {
     const auth = headers.authorization;
@@ -44,6 +67,16 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers' })
     }));
 
     return { servers: serversWithStatus };
+  }, {
+    response: {
+      200: ListServersResponse,
+      401: ErrorResponse,
+    },
+    detail: {
+      summary: 'List all servers',
+      description: 'Get a list of all Minecraft servers with their current status',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id', async ({ params, set }) => {
     const { id } = params;
@@ -61,6 +94,18 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers' })
         status: processManager.getStatus(server.id),
       },
     };
+  }, {
+    params: IdParam,
+    response: {
+      200: ServerResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get server details',
+      description: 'Get detailed information about a specific server including its current status',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/', async ({ body, set }) => {
     const result = CreateServerSchema.safeParse(body);
@@ -148,6 +193,19 @@ online-mode=true
         status: processManager.getStatus(id),
       },
     };
+  }, {
+    body: CreateServerBody,
+    response: {
+      201: ServerResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Create a new server',
+      description: 'Create a new Minecraft server with the specified configuration. Downloads the server JAR and sets up the directory structure.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .patch('/:id', async ({ params, body, set }) => {
     const { id } = params;
@@ -201,6 +259,20 @@ online-mode=true
         status: processManager.getStatus(id),
       },
     };
+  }, {
+    params: IdParam,
+    body: UpdateServerBody,
+    response: {
+      200: ServerResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Update server',
+      description: 'Update basic server settings like name, port, and RAM allocation',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .delete('/:id', async ({ params, set }) => {
     const { id } = params;
@@ -223,6 +295,18 @@ online-mode=true
     await db.delete(servers).where(eq(servers.id, id));
 
     return { message: 'Server deleted successfully' };
+  }, {
+    params: IdParam,
+    response: {
+      200: MessageResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Delete server',
+      description: 'Delete a server and all its files. Server will be stopped if running.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/start', async ({ params, set }) => {
     const { id } = params;
@@ -248,6 +332,20 @@ online-mode=true
       set.status = 500;
       return { error: 'Failed to start server', code: 'START_FAILED' };
     }
+  }, {
+    params: IdParam,
+    response: {
+      200: ActionResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Start server',
+      description: 'Start a stopped Minecraft server',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/stop', async ({ params, set }) => {
     const { id } = params;
@@ -273,6 +371,20 @@ online-mode=true
       set.status = 500;
       return { error: 'Failed to stop server', code: 'STOP_FAILED' };
     }
+  }, {
+    params: IdParam,
+    response: {
+      200: ActionResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Stop server',
+      description: 'Gracefully stop a running Minecraft server using the stop command',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/kill', async ({ params, set }) => {
     const { id } = params;
@@ -285,6 +397,18 @@ online-mode=true
 
     processManager.kill(id);
     return { message: 'Server killed', status: processManager.getStatus(id) };
+  }, {
+    params: IdParam,
+    response: {
+      200: ActionResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Force kill server',
+      description: 'Forcefully terminate a server process with SIGKILL. Use only if graceful stop fails.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/status', async ({ params, set }) => {
     const { id } = params;
@@ -296,6 +420,18 @@ online-mode=true
     }
 
     return { status: processManager.getStatus(id) };
+  }, {
+    params: IdParam,
+    response: {
+      200: StatusResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get server status',
+      description: 'Get the current runtime status of a server (state, PID, uptime)',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/logs', async ({ params, query, set }) => {
     const { id } = params;
@@ -309,6 +445,21 @@ online-mode=true
 
     const logs = processManager.getLogs(id, lines);
     return { logs };
+  }, {
+    params: IdParam,
+    query: t.Object({
+      lines: t.Optional(t.Number({ description: 'Number of log lines to return', default: 100 })),
+    }),
+    response: {
+      200: LogsResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get server logs',
+      description: 'Retrieve recent console output from a server',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/command', async ({ params, body, set }) => {
     const { id } = params;
@@ -338,6 +489,21 @@ online-mode=true
     }
 
     return { message: 'Command sent', command };
+  }, {
+    params: IdParam,
+    body: CommandBody,
+    response: {
+      200: CommandResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Send console command',
+      description: 'Send a command to the running Minecraft server console',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/properties', async ({ params, set }) => {
     const { id } = params;
@@ -367,6 +533,18 @@ online-mode=true
     }
 
     return { properties };
+  }, {
+    params: IdParam,
+    response: {
+      200: PropertiesResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get server properties',
+      description: 'Get parsed server.properties as key-value pairs',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .put('/:id/properties', async ({ params, body, set }) => {
     const { id } = params;
@@ -399,6 +577,20 @@ online-mode=true
 
     const status = processManager.getStatus(id);
     return { needsRestart: status.state === 'running' };
+  }, {
+    params: IdParam,
+    body: PropertiesBody,
+    response: {
+      200: NeedsRestartResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Update server properties',
+      description: 'Update server.properties from key-value pairs. Returns whether server needs restart.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/properties/raw', async ({ params, set }) => {
     const { id } = params;
@@ -416,6 +608,18 @@ online-mode=true
     }
 
     return { content: fs.readFileSync(propsPath, 'utf-8') };
+  }, {
+    params: IdParam,
+    response: {
+      200: RawPropertiesResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get raw server properties',
+      description: 'Get the raw server.properties file content as text',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .put('/:id/properties/raw', async ({ params, body, set }) => {
     const { id } = params;
@@ -450,6 +654,20 @@ online-mode=true
     }
 
     return { needsRestart };
+  }, {
+    params: IdParam,
+    body: RawPropertiesBody,
+    response: {
+      200: NeedsRestartResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Update raw server properties',
+      description: 'Replace server.properties with raw text content. Returns whether server needs restart.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/config', async ({ params, set }) => {
     const { id } = params;
@@ -478,6 +696,18 @@ online-mode=true
     };
 
     return { config: serverConfig };
+  }, {
+    params: IdParam,
+    response: {
+      200: ConfigResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get server configuration',
+      description: 'Get the full server configuration including JVM settings and automation options',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .patch('/:id/config', async ({ params, body, set }) => {
     const { id } = params;
@@ -555,6 +785,20 @@ online-mode=true
       } as ServerConfig,
       needsRestart,
     };
+  }, {
+    params: IdParam,
+    body: UpdateServerConfigBody,
+    response: {
+      200: ConfigUpdateResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Update server configuration',
+      description: 'Update advanced server configuration. Returns whether server needs restart for changes to take effect.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/icon', async ({ params, request, set }) => {
     const { id } = params;
@@ -597,6 +841,20 @@ online-mode=true
     await db.update(servers).set({ iconPath: 'server-icon.png', updatedAt: new Date() }).where(eq(servers.id, id));
 
     return { iconPath: 'server-icon.png' };
+  }, {
+    params: IdParam,
+    response: {
+      200: IconResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Upload server icon',
+      description: 'Upload a custom server icon image. Will be resized to 64x64 PNG. Max size 5MB.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:id/icon', async ({ params, set }) => {
     const { id } = params;
@@ -616,6 +874,16 @@ online-mode=true
     set.headers['Content-Type'] = 'image/png';
     set.headers['Cache-Control'] = 'public, max-age=3600';
     return Bun.file(iconPath);
+  }, {
+    params: IdParam,
+    response: {
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get server icon',
+      description: 'Download the server icon image file',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .delete('/:id/icon', async ({ params, set }) => {
     const { id } = params;
@@ -634,6 +902,18 @@ online-mode=true
     await db.update(servers).set({ iconPath: null, updatedAt: new Date() }).where(eq(servers.id, id));
 
     return { message: 'Icon deleted successfully' };
+  }, {
+    params: IdParam,
+    response: {
+      200: MessageResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Delete server icon',
+      description: 'Remove the custom server icon',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:id/migrate', async ({ params, body, set }) => {
     const { id } = params;
@@ -707,4 +987,19 @@ online-mode=true
         toVersion: version,
       },
     };
+  }, {
+    params: IdParam,
+    body: MigrateBody,
+    response: {
+      200: MigrateResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Migrate server version',
+      description: 'Migrate server to a different type or version. Creates a backup first. Server must be stopped.',
+      security: [{ bearerAuth: [] }],
+    },
   });

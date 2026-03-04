@@ -6,8 +6,16 @@ import { users } from '../db/schema.js';
 import { LoginSchema } from '../types/index.js';
 import { config } from '../config.js';
 import type { JwtPayload } from '../types/index.js';
+import {
+  LoginBody,
+  AuthStatusResponse,
+  SetupResponse,
+  LoginResponse,
+  MeResponse,
+} from '../schemas/auth.js';
+import { ErrorResponse } from '../schemas/common.js';
 
-export const authRoutes = new Elysia({ prefix: '/api/auth' })
+export const authRoutes = new Elysia({ prefix: '/api/auth', detail: { tags: ['auth'] } })
   .use(jwt({
     name: 'jwt',
     secret: config.jwt.secret,
@@ -18,6 +26,14 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
     return {
       setupRequired: result.count === 0,
     };
+  }, {
+    response: {
+      200: AuthStatusResponse,
+    },
+    detail: {
+      summary: 'Check setup status',
+      description: 'Check if initial admin setup is required',
+    },
   })
   .post('/setup', async ({ body, set }) => {
     const [result] = await db.select({ count: count() }).from(users);
@@ -46,6 +62,16 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
     await db.insert(users).values({ username, passwordHash });
 
     return { message: 'Setup completed successfully' };
+  }, {
+    body: LoginBody,
+    response: {
+      200: SetupResponse,
+      400: ErrorResponse,
+    },
+    detail: {
+      summary: 'Initial setup',
+      description: 'Create the initial admin account. Only works if no users exist.',
+    },
   })
   .post('/login', async ({ body, jwt, set }) => {
     const parsed = LoginSchema.safeParse(body);
@@ -85,6 +111,17 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
     });
 
     return { token, user: { id: user.id, username: user.username } };
+  }, {
+    body: LoginBody,
+    response: {
+      200: LoginResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+    },
+    detail: {
+      summary: 'Login',
+      description: 'Authenticate with username and password to receive a JWT token',
+    },
   })
   .resolve(async ({ jwt: jwtPlugin, headers, set }) => {
     const auth = headers.authorization;
@@ -114,4 +151,15 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
     }
 
     return { user: found };
+  }, {
+    response: {
+      200: MeResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Get current user',
+      description: 'Get the currently authenticated user information',
+      security: [{ bearerAuth: [] }],
+    },
   });

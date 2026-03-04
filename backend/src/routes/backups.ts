@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,8 +8,13 @@ import { servers, backups } from '../db/schema.js';
 import { backupManager } from '../modules/backups/index.js';
 import { config } from '../config.js';
 import type { JwtPayload } from '../types/index.js';
+import {
+  CreateBackupResponse,
+  UpdateBackupConfigBody,
+} from '../schemas/backups.js';
+import { ErrorResponse, MessageResponse } from '../schemas/common.js';
 
-export const backupsRoutes = new Elysia({ prefix: '/api/backups' })
+export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags: ['backups'] } })
   .use(jwt({ name: 'jwt', secret: config.jwt.secret, exp: config.jwt.expiresIn }))
   .resolve(async ({ jwt: jwtPlugin, headers, set }) => {
     const auth = headers.authorization;
@@ -37,6 +42,15 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups' })
     const backupConfig = await backupManager.getConfig(serverId);
 
     return { backups: backupsList, config: backupConfig };
+  }, {
+    params: t.Object({
+      serverId: t.String({ description: 'Server UUID' }),
+    }),
+    detail: {
+      summary: 'List backups',
+      description: 'Get all backups and backup configuration for a server',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:serverId', async ({ params, set }) => {
     const { serverId } = params;
@@ -59,6 +73,21 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups' })
         code: 'BACKUP_FAILED',
       };
     }
+  }, {
+    params: t.Object({
+      serverId: t.String({ description: 'Server UUID' }),
+    }),
+    response: {
+      201: CreateBackupResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'Create backup',
+      description: 'Create a manual backup of the server',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .post('/:serverId/:backupId/restore', async ({ params, set }) => {
     const { serverId, backupId } = params;
@@ -80,6 +109,22 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups' })
         code: 'RESTORE_FAILED',
       };
     }
+  }, {
+    params: t.Object({
+      serverId: t.String({ description: 'Server UUID' }),
+      backupId: t.String({ description: 'Backup UUID' }),
+    }),
+    response: {
+      200: MessageResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Restore backup',
+      description: 'Restore a server from a backup. Server must be stopped.',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .get('/:serverId/:backupId/download', async ({ params, set }) => {
     const { serverId, backupId } = params;
@@ -105,6 +150,20 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups' })
     set.headers['Content-Type'] = 'application/gzip';
     set.headers['Content-Disposition'] = `attachment; filename="${backup.filename}"`;
     return Bun.file(backupPath);
+  }, {
+    params: t.Object({
+      serverId: t.String({ description: 'Server UUID' }),
+      backupId: t.String({ description: 'Backup UUID' }),
+    }),
+    response: {
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Download backup',
+      description: 'Download a backup file as tar.gz',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .delete('/:serverId/:backupId', async ({ params, set }) => {
     const { serverId, backupId } = params;
@@ -126,6 +185,22 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups' })
         code: 'DELETE_FAILED',
       };
     }
+  }, {
+    params: t.Object({
+      serverId: t.String({ description: 'Server UUID' }),
+      backupId: t.String({ description: 'Backup UUID' }),
+    }),
+    response: {
+      200: MessageResponse,
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      summary: 'Delete backup',
+      description: 'Delete a backup file',
+      security: [{ bearerAuth: [] }],
+    },
   })
   .patch('/:serverId/config', async ({ params, body, set }) => {
     const { serverId } = params;
@@ -156,4 +231,14 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups' })
 
     const backupConfig = await backupManager.getConfig(serverId);
     return { config: backupConfig };
+  }, {
+    params: t.Object({
+      serverId: t.String({ description: 'Server UUID' }),
+    }),
+    body: UpdateBackupConfigBody,
+    detail: {
+      summary: 'Update backup config',
+      description: 'Update automatic backup configuration for a server',
+      security: [{ bearerAuth: [] }],
+    },
   });

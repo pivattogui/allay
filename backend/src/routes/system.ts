@@ -1,10 +1,17 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { jarManager } from '../modules/servers/jar-manager.js';
 import type { JavaVersion } from '../types/index.js';
+import {
+  SystemInfoResponse,
+  JavaVersionsResponse,
+  ServerTypesResponse,
+  MinecraftVersionsResponse,
+} from '../schemas/system.js';
+import { ErrorResponse } from '../schemas/common.js';
 
 let javaVersionsCache: JavaVersion[] | null = null;
 let cacheTimestamp = 0;
@@ -127,7 +134,7 @@ function getJavaVersions(forceRefresh = false): JavaVersion[] {
   return javaVersionsCache;
 }
 
-export const systemRoutes = new Elysia({ prefix: '/api/system' })
+export const systemRoutes = new Elysia({ prefix: '/api/system', detail: { tags: ['system'] } })
   .get('/info', () => {
     const totalRamMb = Math.round(os.totalmem() / 1024 / 1024);
     const freeRamMb = Math.round(os.freemem() / 1024 / 1024);
@@ -150,14 +157,38 @@ export const systemRoutes = new Elysia({ prefix: '/api/system' })
       arch: os.arch(),
       uptime: os.uptime(),
     };
+  }, {
+    response: {
+      200: SystemInfoResponse,
+    },
+    detail: {
+      summary: 'Get system info',
+      description: 'Get system resources information including RAM, CPU, Java version, and platform details',
+    },
   })
   .get('/java-versions', () => {
     const versions = getJavaVersions();
     return { versions };
+  }, {
+    response: {
+      200: JavaVersionsResponse,
+    },
+    detail: {
+      summary: 'List Java versions',
+      description: 'Detect and list all installed Java versions on the system',
+    },
   })
   .post('/java-versions/refresh', () => {
     const versions = getJavaVersions(true);
     return { versions };
+  }, {
+    response: {
+      200: JavaVersionsResponse,
+    },
+    detail: {
+      summary: 'Refresh Java versions',
+      description: 'Force refresh the Java versions cache',
+    },
   })
   .get('/server-types', () => {
     return {
@@ -166,6 +197,14 @@ export const systemRoutes = new Elysia({ prefix: '/api/system' })
         { id: 'paper', name: 'Paper' },
       ],
     };
+  }, {
+    response: {
+      200: ServerTypesResponse,
+    },
+    detail: {
+      summary: 'List server types',
+      description: 'Get available Minecraft server types',
+    },
   })
   .get('/versions/:type', async ({ params, set }) => {
     const { type } = params;
@@ -189,4 +228,17 @@ export const systemRoutes = new Elysia({ prefix: '/api/system' })
         code: 'FETCH_VERSIONS_FAILED',
       };
     }
+  }, {
+    params: t.Object({
+      type: t.String({ description: 'Server type (vanilla or paper)' }),
+    }),
+    response: {
+      200: MinecraftVersionsResponse,
+      400: ErrorResponse,
+      500: ErrorResponse,
+    },
+    detail: {
+      summary: 'List Minecraft versions',
+      description: 'Get available Minecraft versions for a specific server type',
+    },
   });

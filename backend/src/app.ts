@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { jwt } from '@elysiajs/jwt';
+import { swagger } from '@elysiajs/swagger';
 import { eq } from 'drizzle-orm';
 import { config } from './config.js';
 import { db } from './db/index.js';
@@ -17,6 +18,34 @@ import { restartScheduler } from './modules/scheduler/restart-scheduler.js';
 import { processManager } from './modules/process/index.js';
 export function buildApp() {
   const app = new Elysia()
+    .use(swagger({
+      path: '/docs',
+      documentation: {
+        info: {
+          title: 'Allay API',
+          version: '1.0.0',
+          description: 'Minecraft Server Management API - Manage server lifecycle, backups, files, and real-time monitoring.',
+        },
+        tags: [
+          { name: 'auth', description: 'Authentication and user management' },
+          { name: 'servers', description: 'Server CRUD and control operations' },
+          { name: 'backups', description: 'Backup management and restore' },
+          { name: 'files', description: 'Server file browser and editor' },
+          { name: 'system', description: 'System information and versions' },
+        ],
+        components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: 'http',
+              scheme: 'bearer',
+              bearerFormat: 'JWT',
+              description: 'JWT token obtained from /api/auth/login',
+            },
+          },
+        },
+      },
+      exclude: ['/health', '/ws'],
+    }))
     .use(cors({
       origin: config.isDev ? true : ['http://localhost:8080'],
       credentials: true,
