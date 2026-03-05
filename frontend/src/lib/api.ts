@@ -1,4 +1,5 @@
-import type { Server, Backup } from '../types/server'
+import type { Server, Backup, Node } from '../types/server'
+export type { Node }
 import { useAuthStore } from '../stores'
 
 function getAuthHeaders(): HeadersInit {
@@ -98,6 +99,7 @@ export interface CreateServerData {
   port: number
   ramMinMb: number
   ramMaxMb: number
+  nodeId?: string
 }
 
 export async function createServer(data: CreateServerData): Promise<Server> {
@@ -373,6 +375,36 @@ export async function cancelImport(serverId: string, tempFileId: string): Promis
     headers: getAuthHeaders(),
   })
   if (!res.ok) throw new Error('Failed to cancel import')
+}
+
+// Nodes
+export async function fetchNodes(): Promise<Node[]> {
+  const res = await fetch('/api/nodes', {
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error('Failed to fetch nodes')
+  const data = await res.json()
+  return data.nodes
+}
+
+export async function fetchNode(id: string): Promise<Node> {
+  const res = await fetch(`/api/nodes/${id}`, {
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error('Failed to fetch node')
+  const data = await res.json()
+  return data.node
+}
+
+export async function deleteNode(id: string): Promise<void> {
+  const res = await fetch(`/api/nodes/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || 'Failed to delete node')
+  }
 }
 
 // API wrapper with axios-like interface for new hooks

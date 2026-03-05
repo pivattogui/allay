@@ -1,5 +1,9 @@
 import { Elysia } from 'elysia';
+import { eq } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { servers } from '../db/schema.js';
 import { processManager } from '../modules/process/index.js';
+import * as serverProxy from '../modules/agent/server-proxy.js';
 import { metricsCollector } from '../modules/metrics/index.js';
 import type { WSClient } from '../types/ws.js';
 import { WS_OPEN } from '../types/ws.js';
@@ -58,7 +62,7 @@ export const setupWebSocket = new Elysia()
 
 setupProcessManagerListeners();
 
-function handleMessage(socket: WSClient, subscription: Subscription, message: WSMessage) {
+async function handleMessage(socket: WSClient, subscription: Subscription, message: WSMessage) {
   const { type, serverId, channels } = message;
 
   if (type === 'subscribe') {
@@ -78,8 +82,11 @@ function handleMessage(socket: WSClient, subscription: Subscription, message: WS
       }
     }
 
+    // Fetch server to determine if remote or local
+    const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);
+
     if (channels.includes('status')) {
-      const status = processManager.getStatus(serverId);
+      const status = server ? await serverProxy.getStatus(server) : processManager.getStatus(serverId);
       socket.send(JSON.stringify({
         type: 'status',
         serverId,
@@ -88,7 +95,7 @@ function handleMessage(socket: WSClient, subscription: Subscription, message: WS
     }
 
     if (channels.includes('logs')) {
-      const logs = processManager.getLogs(serverId, 50);
+      const logs = server ? await serverProxy.getLogs(server, 50) : processManager.getLogs(serverId, 50);
       for (const log of logs) {
         socket.send(JSON.stringify({
           type: 'log',

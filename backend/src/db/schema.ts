@@ -7,12 +7,25 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const nodes = pgTable('nodes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  host: text('host').notNull(),
+  port: integer('port').notNull().default(4000),
+  status: text('status', { enum: ['online', 'offline'] }).notNull().default('offline'),
+  cpuCores: integer('cpu_cores'),
+  ramTotalMb: integer('ram_total_mb'),
+  diskTotalGb: integer('disk_total_gb'),
+  lastHeartbeat: timestamp('last_heartbeat'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const servers = pgTable('servers', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   type: text('type', { enum: ['vanilla', 'paper'] }).notNull(),
   version: text('version').notNull(),
-  port: integer('port').notNull().unique(),
+  port: integer('port').notNull(),
   ramMinMb: integer('ram_min_mb').notNull().default(1024),
   ramMaxMb: integer('ram_max_mb').notNull().default(2048),
   javaVersion: text('java_version'),
@@ -24,6 +37,7 @@ export const servers = pgTable('servers', {
   jvmArgs: text('jvm_args'),
   javaPath: text('java_path'),
   restartSchedule: text('restart_schedule'),
+  nodeId: uuid('node_id').references(() => nodes.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

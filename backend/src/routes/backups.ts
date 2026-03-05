@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { servers, backups } from '../db/schema.js';
 import { backupManager } from '../modules/backups/index.js';
+import * as serverProxy from '../modules/agent/server-proxy.js';
 import { config } from '../config.js';
 import type { JwtPayload } from '../types/index.js';
 import {
@@ -38,6 +39,16 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
+    if (server.nodeId) {
+      try {
+        const agentBackups = await serverProxy.listBackups(server);
+        return { backups: agentBackups, config: await backupManager.getConfig(serverId) };
+      } catch (err) {
+        console.error('Failed to list backups from agent:', err);
+        return { backups: [], config: await backupManager.getConfig(serverId) };
+      }
+    }
+
     const backupsList = await backupManager.listBackups(serverId);
     const backupConfig = await backupManager.getConfig(serverId);
 
@@ -62,6 +73,12 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
     }
 
     try {
+      if (server.nodeId) {
+        const agentBackup = await serverProxy.createBackup(server);
+        set.status = 201;
+        return { backup: agentBackup };
+      }
+
       const backup = await backupManager.createBackup(serverId, 'manual');
       set.status = 201;
       return { backup };
@@ -99,6 +116,11 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
     }
 
     try {
+      if (server.nodeId) {
+        await serverProxy.restoreBackup(server, backupId);
+        return { message: 'Backup restored successfully' };
+      }
+
       await backupManager.restoreBackup(backupId);
       return { message: 'Backup restored successfully' };
     } catch (err) {
@@ -175,6 +197,11 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
     }
 
     try {
+      if (server.nodeId) {
+        await serverProxy.deleteBackup(server, backupId);
+        return { message: 'Backup deleted successfully' };
+      }
+
       await backupManager.deleteBackup(backupId);
       return { message: 'Backup deleted successfully' };
     } catch (err) {

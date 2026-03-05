@@ -22,6 +22,7 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://allay:allay@postgres:5432/allay
       JWT_SECRET: development-secret-change-in-production
+      AGENT_TOKEN: dev-agent-token-change-in-production
     volumes:
       - .:/app
       - /app/node_modules
@@ -29,6 +30,25 @@ services:
     depends_on:
       - postgres
 
+  agent:
+    build:
+      context: ../agent
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      AGENT_PORT: "4000"
+      CONTROLLER_URL: http://backend:3000
+      AGENT_TOKEN: dev-agent-token-change-in-production
+      DATA_DIR: /opt/allay-agent/data
+      AGENT_NAME: "Local Dev Node"
+      AGENT_HOST: "agent"
+    volumes:
+      - agent-data:/opt/allay-agent/data
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
   server-data:
+  agent-data:

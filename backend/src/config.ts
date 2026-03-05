@@ -8,6 +8,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().default('postgresql://allay:allay@localhost:5432/allay'),
   JWT_SECRET: z.string().min(16).default('development-secret-change-in-production'),
   JWT_EXPIRES_IN: z.string().default('24h'),
+  AGENT_TOKEN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -37,6 +38,10 @@ export const config = {
   jwt: {
     secret: env.JWT_SECRET,
     expiresIn: env.JWT_EXPIRES_IN,
+  },
+
+  agent: {
+    token: env.AGENT_TOKEN || env.JWT_SECRET,
   },
 
   minecraft: {

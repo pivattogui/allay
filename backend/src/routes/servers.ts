@@ -5,15 +5,15 @@ import { eq, ne, and, desc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { servers, backupConfigs, events } from '../db/schema.js';
 import { config } from '../config.js';
-import { processManager } from '../modules/process/index.js';
 import { jarManager } from '../modules/servers/jar-manager.js';
+import * as serverProxy from '../modules/agent/server-proxy.js';
+import { nodeManager } from '../modules/agent/node-manager.js';
 import {
   CreateServerSchema,
   UpdateServerSchema,
   UpdateServerConfigSchema,
   type ServerWithStatus,
   type ServerConfig,
-  type Server,
 } from '../types/index.js';
 import type { JwtPayload } from '../types/index.js';
 import {
@@ -61,10 +61,12 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
   .get('/', async () => {
     const rows = await db.select().from(servers).orderBy(desc(servers.createdAt));
 
-    const serversWithStatus: ServerWithStatus[] = rows.map((server) => ({
-      ...server,
-      status: processManager.getStatus(server.id),
-    }));
+    const serversWithStatus: ServerWithStatus[] = await Promise.all(
+      rows.map(async (server) => ({
+        ...server,
+        status: await serverProxy.getStatus(server),
+      }))
+    );
 
     return { servers: serversWithStatus };
   }, {
@@ -91,7 +93,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     return {
       server: {
         ...server,
-        status: processManager.getStatus(server.id),
+        status: await serverProxy.getStatus(server),
       },
     };
   }, {
@@ -132,30 +134,51 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     }
 
     const id = uuidv4();
-    const directory = path.join(config.paths.servers, id);
 
-    fs.mkdirSync(directory, { recursive: true });
-
-    try {
-      console.info(`Downloading ${input.type} server JAR version ${input.version}...`);
-      const jarPath = await jarManager.download(input.type, input.version);
-      fs.copyFileSync(jarPath, path.join(directory, 'server.jar'));
-    } catch (err) {
-      fs.rmSync(directory, { recursive: true, force: true });
-      console.error(err);
-      set.status = 500;
-      return { error: 'Failed to download server JAR', code: 'JAR_DOWNLOAD_FAILED' };
+    // Auto-assign node if not provided - agent is required
+    let nodeId: string | null = input.nodeId ?? null;
+    if (!nodeId) {
+      const allNodes = await nodeManager.getAllNodes();
+      const onlineNode = allNodes.find(n => n.status === 'online');
+      if (!onlineNode) {
+        set.status = 400;
+        return { error: 'No online nodes available. Start an agent first.', code: 'NO_NODES_AVAILABLE' };
+      }
+      nodeId = onlineNode.id;
     }
 
-    fs.writeFileSync(path.join(directory, 'eula.txt'), 'eula=true\n');
+    // Verify node exists and is online
+    const node = await nodeManager.getNode(nodeId);
+    if (!node) {
+      set.status = 400;
+      return { error: 'Node not found', code: 'NODE_NOT_FOUND' };
+    }
+    if (node.status !== 'online') {
+      set.status = 400;
+      return { error: 'Node is offline', code: 'NODE_OFFLINE' };
+    }
 
-    const serverProperties = `
-server-port=${input.port}
-motd=MC Manager Server
-max-players=20
-online-mode=true
-`.trim();
-    fs.writeFileSync(path.join(directory, 'server.properties'), serverProperties);
+    // Agent handles directory creation - use agent's data dir
+    const directory = `servers/${id}`;
+
+    // Provision on agent — agent handles JAR download, directory creation, etc.
+    try {
+      const client = await nodeManager.getClientForNode(nodeId);
+      await client.downloadJar(input.type, input.version);
+      await client.provisionServer({
+        id,
+        name: input.name,
+        type: input.type,
+        version: input.version,
+        port: input.port,
+        ramMin: input.ramMinMb,
+        ramMax: input.ramMaxMb,
+      });
+    } catch (err: any) {
+      console.error('Agent provisioning failed:', err);
+      set.status = 500;
+      return { error: `Agent provisioning failed: ${err.message}`, code: 'AGENT_PROVISION_FAILED' };
+    }
 
     await db.insert(servers).values({
       id,
@@ -168,6 +191,7 @@ online-mode=true
       directory,
       autoStart: input.autoStart,
       autoRestart: input.autoRestart,
+      nodeId,
     });
 
     await db.insert(backupConfigs).values({
@@ -190,7 +214,7 @@ online-mode=true
     return {
       server: {
         ...server!,
-        status: processManager.getStatus(id),
+        status: await serverProxy.getStatus(server!),
       },
     };
   }, {
@@ -231,11 +255,19 @@ online-mode=true
         return { error: 'Port already in use by another server', code: 'PORT_IN_USE' };
       }
 
-      const propsPath = path.join(server.directory, 'server.properties');
-      if (fs.existsSync(propsPath)) {
-        let props = fs.readFileSync(propsPath, 'utf-8');
-        props = props.replace(/server-port=\d+/, `server-port=${input.port}`);
-        fs.writeFileSync(propsPath, props);
+      if (server.nodeId) {
+        try {
+          const rawProps = await serverProxy.readProperties(server);
+          const updatedProps = rawProps.replace(/server-port=\d+/, `server-port=${input.port}`);
+          await serverProxy.writeProperties(server, updatedProps);
+        } catch { /* agent may not have server.properties yet */ }
+      } else {
+        const propsPath = path.join(server.directory, 'server.properties');
+        if (fs.existsSync(propsPath)) {
+          let props = fs.readFileSync(propsPath, 'utf-8');
+          props = props.replace(/server-port=\d+/, `server-port=${input.port}`);
+          fs.writeFileSync(propsPath, props);
+        }
       }
     }
 
@@ -256,7 +288,7 @@ online-mode=true
     return {
       server: {
         ...updatedServer!,
-        status: processManager.getStatus(id),
+        status: await serverProxy.getStatus(updatedServer!),
       },
     };
   }, {
@@ -283,9 +315,13 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(server);
     if (status.state === 'running' || status.state === 'starting') {
-      await processManager.stop(id);
+      await serverProxy.stopServer(server);
+    }
+
+    if (server.nodeId) {
+      try { await serverProxy.deprovisionOnAgent(server); } catch { /* agent may be offline */ }
     }
 
     if (fs.existsSync(server.directory)) {
@@ -317,16 +353,16 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(server);
     if (status.state === 'running' || status.state === 'starting') {
       set.status = 400;
       return { error: 'Server is already running', code: 'SERVER_ALREADY_RUNNING' };
     }
 
     try {
-      await processManager.start(server as Server);
+      await serverProxy.startServer(server);
       await db.insert(events).values({ serverId: id, type: 'start', message: 'Server started' });
-      return { message: 'Server starting', status: processManager.getStatus(id) };
+      return { message: 'Server starting', status: await serverProxy.getStatus(server) };
     } catch (err) {
       console.error(err);
       set.status = 500;
@@ -356,16 +392,16 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(server);
     if (status.state === 'stopped' || status.state === 'stopping') {
       set.status = 400;
       return { error: 'Server is not running', code: 'SERVER_NOT_RUNNING' };
     }
 
     try {
-      await processManager.stop(id);
+      await serverProxy.stopServer(server);
       await db.insert(events).values({ serverId: id, type: 'stop', message: 'Server stopped' });
-      return { message: 'Server stopped', status: processManager.getStatus(id) };
+      return { message: 'Server stopped', status: await serverProxy.getStatus(server) };
     } catch (err) {
       console.error(err);
       set.status = 500;
@@ -395,8 +431,8 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    processManager.kill(id);
-    return { message: 'Server killed', status: processManager.getStatus(id) };
+    await serverProxy.killServer(server);
+    return { message: 'Server killed', status: await serverProxy.getStatus(server) };
   }, {
     params: IdParam,
     response: {
@@ -419,7 +455,7 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    return { status: processManager.getStatus(id) };
+    return { status: await serverProxy.getStatus(server) };
   }, {
     params: IdParam,
     response: {
@@ -443,7 +479,7 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const logs = processManager.getLogs(id, lines);
+    const logs = await serverProxy.getLogs(server, lines);
     return { logs };
   }, {
     params: IdParam,
@@ -476,14 +512,14 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(server);
     if (status.state !== 'running') {
       set.status = 400;
       return { error: 'Server is not running', code: 'SERVER_NOT_RUNNING' };
     }
 
-    const sent = processManager.sendCommand(id, command);
-    if (!sent) {
+    const result = await serverProxy.sendCommand(server, command);
+    if (!result.sent) {
       set.status = 500;
       return { error: 'Failed to send command', code: 'COMMAND_FAILED' };
     }
@@ -514,14 +550,22 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const propsPath = path.join(server.directory, 'server.properties');
-    if (!fs.existsSync(propsPath)) {
-      return { properties: {} };
+    let content: string;
+    if (server.nodeId) {
+      try {
+        content = await serverProxy.readProperties(server);
+      } catch {
+        return { properties: {} };
+      }
+    } else {
+      const propsPath = path.join(server.directory, 'server.properties');
+      if (!fs.existsSync(propsPath)) {
+        return { properties: {} };
+      }
+      content = fs.readFileSync(propsPath, 'utf-8');
     }
 
-    const content = fs.readFileSync(propsPath, 'utf-8');
     const properties: Record<string, string> = {};
-
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
@@ -561,9 +605,13 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const propsPath = path.join(server.directory, 'server.properties');
     const content = Object.entries(properties).map(([key, value]) => `${key}=${value}`).join('\n');
-    fs.writeFileSync(propsPath, content);
+    if (server.nodeId) {
+      await serverProxy.writeProperties(server, content);
+    } else {
+      const propsPath = path.join(server.directory, 'server.properties');
+      fs.writeFileSync(propsPath, content);
+    }
 
     if (properties['server-port']) {
       const newPort = parseInt(properties['server-port'], 10);
@@ -575,7 +623,7 @@ online-mode=true
       }
     }
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(server);
     return { needsRestart: status.state === 'running' };
   }, {
     params: IdParam,
@@ -599,6 +647,16 @@ online-mode=true
     if (!server) {
       set.status = 404;
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
+    }
+
+    if (server.nodeId) {
+      try {
+        const content = await serverProxy.readProperties(server);
+        return { content };
+      } catch {
+        set.status = 404;
+        return { error: 'server.properties not found', code: 'PROPERTIES_NOT_FOUND' };
+      }
     }
 
     const propsPath = path.join(server.directory, 'server.properties');
@@ -636,11 +694,15 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(server);
     const needsRestart = status.state === 'running';
 
-    const propsPath = path.join(server.directory, 'server.properties');
-    fs.writeFileSync(propsPath, content);
+    if (server.nodeId) {
+      await serverProxy.writeProperties(server, content);
+    } else {
+      const propsPath = path.join(server.directory, 'server.properties');
+      fs.writeFileSync(propsPath, content);
+    }
 
     const portMatch = content.match(/server-port=(\d+)/);
     if (portMatch) {
@@ -758,7 +820,7 @@ online-mode=true
     const [updatedServer] = await db.select().from(servers).where(eq(servers.id, id)).limit(1);
     const s = updatedServer!;
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(updatedServer!);
     const needsRestart = status.state === 'running' && (
       input.ramMinMb !== undefined ||
       input.ramMaxMb !== undefined ||
@@ -829,9 +891,14 @@ online-mode=true
       return { error: 'File size must be less than 5MB', code: 'FILE_TOO_LARGE' };
     }
 
-    const iconPath = path.join(server.directory, 'server-icon.png');
     try {
-      await sharp(buffer).resize(64, 64, { fit: 'cover' }).png().toFile(iconPath);
+      const processed = await sharp(buffer).resize(64, 64, { fit: 'cover' }).png().toBuffer();
+      if (server.nodeId) {
+        await serverProxy.writeIcon(server, processed);
+      } else {
+        const iconPath = path.join(server.directory, 'server-icon.png');
+        fs.writeFileSync(iconPath, processed);
+      }
     } catch (err) {
       console.error(err);
       set.status = 500;
@@ -865,6 +932,18 @@ online-mode=true
       return { error: 'Icon not found', code: 'ICON_NOT_FOUND' };
     }
 
+    if (server.nodeId) {
+      try {
+        const resp = await serverProxy.readIcon(server);
+        set.headers['Content-Type'] = 'image/png';
+        set.headers['Cache-Control'] = 'public, max-age=3600';
+        return new Response(resp.body, { headers: { 'Content-Type': 'image/png' } });
+      } catch {
+        set.status = 404;
+        return { error: 'Icon not found', code: 'ICON_NOT_FOUND' };
+      }
+    }
+
     const iconPath = path.join(server.directory, 'server-icon.png');
     if (!fs.existsSync(iconPath)) {
       set.status = 404;
@@ -894,9 +973,13 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const iconPath = path.join(server.directory, 'server-icon.png');
-    if (fs.existsSync(iconPath)) {
-      fs.unlinkSync(iconPath);
+    if (server.nodeId) {
+      try { await serverProxy.deleteIcon(server); } catch { /* icon may not exist */ }
+    } else {
+      const iconPath = path.join(server.directory, 'server-icon.png');
+      if (fs.existsSync(iconPath)) {
+        fs.unlinkSync(iconPath);
+      }
     }
 
     await db.update(servers).set({ iconPath: null, updatedAt: new Date() }).where(eq(servers.id, id));
@@ -935,7 +1018,7 @@ online-mode=true
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = processManager.getStatus(id);
+    const status = await serverProxy.getStatus(server);
     if (status.state === 'running' || status.state === 'starting') {
       set.status = 400;
       return { error: 'Server must be stopped before migration', code: 'SERVER_RUNNING' };
@@ -955,14 +1038,21 @@ online-mode=true
     }
 
     try {
-      console.info(`Downloading ${type} server JAR version ${version}...`);
-      const jarPath = await jarManager.download(type as 'vanilla' | 'paper', version);
+      if (server.nodeId) {
+        const client = await nodeManager.getClientForNode(server.nodeId);
+        await client.downloadJar(type, version);
+        const jarData = fs.readFileSync(path.join(config.paths.jars, type, `${version}.jar`));
+        await client.writeFile(server.id, 'server.jar', jarData);
+      } else {
+        console.info(`Downloading ${type} server JAR version ${version}...`);
+        const jarPath = await jarManager.download(type as 'vanilla' | 'paper', version);
 
-      const serverJarPath = path.join(server.directory, 'server.jar');
-      if (fs.existsSync(serverJarPath)) {
-        fs.unlinkSync(serverJarPath);
+        const serverJarPath = path.join(server.directory, 'server.jar');
+        if (fs.existsSync(serverJarPath)) {
+          fs.unlinkSync(serverJarPath);
+        }
+        fs.copyFileSync(jarPath, serverJarPath);
       }
-      fs.copyFileSync(jarPath, serverJarPath);
     } catch (err) {
       console.error(err);
       set.status = 500;

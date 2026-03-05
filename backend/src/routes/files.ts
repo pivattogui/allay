@@ -16,7 +16,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { importManager, ImportError } from '../modules/import/index.js';
 import { ApplyChangesSchema } from '../modules/import/types.js';
-import { processManager } from '../modules/process/index.js';
+import * as serverProxy from '../modules/agent/server-proxy.js';
 import type { JwtPayload } from '../types/index.js';
 import {
   ListDirBody,
@@ -68,6 +68,31 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers', detail: { tags: 
     if (!server) {
       set.status = 404;
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
+    }
+
+    // Proxy to agent for remote servers
+    if (server.nodeId) {
+      try {
+        const agentEntries = await serverProxy.listFiles(server, relativePath);
+        const entries: FileEntry[] = (agentEntries || []).map((e: any) => ({
+          name: e.name,
+          type: e.isDir ? 'directory' : 'file',
+          size: e.isDir ? 0 : (e.size || 0),
+          modified: e.modTime || new Date().toISOString(),
+          extension: e.isDir ? undefined : path.extname(e.name).toLowerCase() || undefined,
+          editable: e.isDir ? undefined : isEditableFile(e.name),
+          sensitive: e.isDir ? undefined : isSensitiveFile(e.name),
+          fileType: e.isDir ? undefined : getFileType(e.name),
+        }));
+        entries.sort((a, b) => {
+          if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        return { path: relativePath || '/', entries };
+      } catch (err) {
+        set.status = 500;
+        return { error: 'Failed to list files on agent', code: 'AGENT_ERROR' };
+      }
     }
 
     const resolved = resolveServerPath(id, relativePath, config.paths.servers);
@@ -610,7 +635,7 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers', detail: { tags: 
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const serverStatus = processManager.getStatus(id);
+    const serverStatus = await serverProxy.getStatus(server);
     if (serverStatus?.state === 'running' || serverStatus?.state === 'starting') {
       set.status = 409;
       return { error: 'Server must be stopped before importing backup', code: 'SERVER_BUSY' };

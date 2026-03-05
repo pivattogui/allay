@@ -11,11 +11,14 @@ import { serversRoutes } from './routes/servers.js';
 import { systemRoutes } from './routes/system.js';
 import { backupsRoutes } from './routes/backups.js';
 import { filesRoutes } from './routes/files.js';
+import { nodesRoutes } from './routes/nodes.js';
 import { setupWebSocket } from './websocket/handler.js';
+import { setupAgentWebSocket } from './websocket/agent-handler.js';
 import { backupManager } from './modules/backups/index.js';
 import { importManager } from './modules/import/index.js';
 import { restartScheduler } from './modules/scheduler/restart-scheduler.js';
 import { processManager } from './modules/process/index.js';
+import { nodeManager } from './modules/agent/node-manager.js';
 export function buildApp() {
   const app = new Elysia()
     .use(swagger({
@@ -89,7 +92,9 @@ export function buildApp() {
     .use(systemRoutes)
     .use(backupsRoutes)
     .use(filesRoutes)
-    .use(setupWebSocket);
+    .use(nodesRoutes)
+    .use(setupWebSocket)
+    .use(setupAgentWebSocket);
 
   return app;
 }
@@ -98,23 +103,38 @@ export async function initializeServices() {
   await backupManager.initializeSchedules();
   await importManager.initialize();
   await restartScheduler.initialize();
+  nodeManager.startHeartbeatMonitor();
 
   restartScheduler.on('server:restart-scheduled', async (serverId: string) => {
-    const status = processManager.getStatus(serverId);
-    if (status.state === 'running') {
-      console.info(`[RestartScheduler] Restarting server ${serverId}`);
-      try {
-        await processManager.stop(serverId);
-        const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);
-        if (server) {
-          await processManager.start(server as any);
-          console.info(`[RestartScheduler] Server ${serverId} restarted successfully`);
-        }
-      } catch (err) {
-        console.error(`[RestartScheduler] Failed to restart server ${serverId}: ${err instanceof Error ? err.message : String(err)}`);
+    try {
+      const client = await nodeManager.getClientForServer(serverId);
+      const status = await client.getServerStatus(serverId);
+
+      if (status.state === 'running') {
+        console.info(`[RestartScheduler] Restarting server ${serverId} via agent`);
+        await client.restartServer(serverId);
+        console.info(`[RestartScheduler] Server ${serverId} restart triggered`);
+      } else {
+        console.info(`[RestartScheduler] Server ${serverId} not running, skipping restart`);
       }
-    } else {
-      console.info(`[RestartScheduler] Server ${serverId} not running, skipping restart`);
+    } catch (err) {
+      console.warn(`[RestartScheduler] Agent proxy failed, falling back to local process manager`);
+      const status = processManager.getStatus(serverId);
+      if (status.state === 'running') {
+        console.info(`[RestartScheduler] Restarting server ${serverId} locally`);
+        try {
+          await processManager.stop(serverId);
+          const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);
+          if (server) {
+            await processManager.start(server as any);
+            console.info(`[RestartScheduler] Server ${serverId} restarted successfully`);
+          }
+        } catch (err) {
+          console.error(`[RestartScheduler] Failed to restart server ${serverId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        console.info(`[RestartScheduler] Server ${serverId} not running, skipping restart`);
+      }
     }
   });
 }
