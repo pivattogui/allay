@@ -17,7 +17,6 @@ export const CreateServerSchema = z.object({
   ramMaxMb: z.number().int().min(512).max(32768).default(2048),
   autoStart: z.boolean().default(false),
   autoRestart: z.boolean().default(false),
-  nodeId: z.string().uuid().optional(),
 });
 
 export type CreateServerInput = z.infer<typeof CreateServerSchema>;
@@ -65,7 +64,6 @@ export interface Server {
   jvmArgs: string | null;
   javaPath: string | null;
   restartSchedule: string | null;
-  nodeId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
