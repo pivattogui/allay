@@ -1,6 +1,5 @@
 import { Elysia, t } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
-import { Readable } from 'node:stream';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { servers } from '../db/schema.js';
@@ -14,9 +13,6 @@ import {
 } from '../utils/file-security.js';
 import path from 'node:path';
 import fs from 'node:fs';
-import { importManager, ImportError } from '../modules/import/index.js';
-import { ApplyChangesSchema } from '../modules/import/types.js';
-import * as serverProxy from '../modules/agent/server-proxy.js';
 import type { JwtPayload } from '../types/index.js';
 import {
   ListDirBody,
@@ -24,8 +20,6 @@ import {
   WriteFileBody,
   RenameBody,
   RenameResponse,
-  ImportDiffBody,
-  ImportApplyBody,
 } from '../schemas/files.js';
 import { ErrorResponse } from '../schemas/common.js';
 
@@ -68,31 +62,6 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers', detail: { tags: 
     if (!server) {
       set.status = 404;
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
-    }
-
-    // Proxy to agent for remote servers
-    if (server.nodeId) {
-      try {
-        const agentEntries = await serverProxy.listFiles(server, relativePath);
-        const entries: FileEntry[] = (agentEntries || []).map((e: any) => ({
-          name: e.name,
-          type: e.isDir ? 'directory' : 'file',
-          size: e.isDir ? 0 : (e.size || 0),
-          modified: e.modTime || new Date().toISOString(),
-          extension: e.isDir ? undefined : path.extname(e.name).toLowerCase() || undefined,
-          editable: e.isDir ? undefined : isEditableFile(e.name),
-          sensitive: e.isDir ? undefined : isSensitiveFile(e.name),
-          fileType: e.isDir ? undefined : getFileType(e.name),
-        }));
-        entries.sort((a, b) => {
-          if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-          return a.name.localeCompare(b.name);
-        });
-        return { path: relativePath || '/', entries };
-      } catch (err) {
-        set.status = 500;
-        return { error: 'Failed to list files on agent', code: 'AGENT_ERROR' };
-      }
     }
 
     const resolved = resolveServerPath(id, relativePath, config.paths.servers);
@@ -525,172 +494,4 @@ export const filesRoutes = new Elysia({ prefix: '/api/servers', detail: { tags: 
       security: [{ bearerAuth: [] }],
     },
   })
-  .post('/:id/files/import/upload', async ({ params, request, set }) => {
-    const { id } = params as { id: string };
-
-    const server = await getServer(id);
-    if (!server) {
-      set.status = 404;
-      return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
-    }
-
-    try {
-      const formData = await request.formData();
-      const file = formData.get('file') as File | null;
-
-      if (!file) {
-        set.status = 400;
-        return { error: 'No file uploaded', code: 'INVALID_ARCHIVE' };
-      }
-
-      const filename = file.name.toLowerCase();
-      if (!filename.endsWith('.tar.gz') && !filename.endsWith('.tgz') && !filename.endsWith('.zip')) {
-        set.status = 400;
-        return { error: 'Invalid file type. Only .tar.gz and .zip are supported.', code: 'UNSUPPORTED_FORMAT' };
-      }
-
-      const nodeStream = Readable.fromWeb(file.stream() as ReadableStream<Uint8Array>);
-      const result = await importManager.handleUpload(nodeStream, file.name);
-      return result;
-    } catch (err) {
-      if (err instanceof ImportError) {
-        set.status = 400;
-        return { error: err.message, code: err.code, details: err.details };
-      }
-      throw err;
-    }
-  }, {
-    detail: {
-      summary: 'Upload backup for import',
-      description: 'Upload a backup archive (.tar.gz or .zip) for importing into a server',
-      security: [{ bearerAuth: [] }],
-    },
-  })
-  .get('/:id/files/import/:tempFileId/metadata', async ({ params, set }) => {
-    const { id, tempFileId } = params as { id: string; tempFileId: string };
-
-    const server = await getServer(id);
-    if (!server) {
-      set.status = 404;
-      return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
-    }
-
-    const metadata = importManager.getMetadata(tempFileId);
-    if (!metadata) {
-      set.status = 404;
-      return { error: 'Backup not found or expired', code: 'BACKUP_NOT_FOUND' };
-    }
-
-    return { metadata };
-  }, {
-    detail: {
-      summary: 'Get import metadata',
-      description: 'Get detected metadata from an uploaded backup archive',
-      security: [{ bearerAuth: [] }],
-    },
-  })
-  .post('/:id/files/import/diff', async ({ params, body, set }) => {
-    const { id } = params as { id: string };
-    const { tempFileId } = (body || {}) as { tempFileId: string };
-
-    const server = await getServer(id);
-    if (!server) {
-      set.status = 404;
-      return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
-    }
-
-    if (!tempFileId) {
-      set.status = 400;
-      return { error: 'tempFileId is required', code: 'VALIDATION_ERROR' };
-    }
-
-    try {
-      const diffResult = await importManager.generateDiff(tempFileId, id);
-      return diffResult;
-    } catch (err) {
-      if (err instanceof ImportError) {
-        set.status = err.code === 'BACKUP_NOT_FOUND' ? 404 : 400;
-        return { error: err.message, code: err.code, details: err.details };
-      }
-      throw err;
-    }
-  }, {
-    body: ImportDiffBody,
-    detail: {
-      summary: 'Generate import diff',
-      description: 'Compare uploaded backup with current server files to show differences',
-      security: [{ bearerAuth: [] }],
-    },
-  })
-  .post('/:id/files/import/apply', async ({ params, body, set }) => {
-    const { id } = params as { id: string };
-    const { tempFileId, selections } = (body || {}) as {
-      tempFileId: string;
-      selections: Array<{ id: string; action: 'keep' | 'use-backup' }>;
-    };
-
-    const server = await getServer(id);
-    if (!server) {
-      set.status = 404;
-      return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
-    }
-
-    const serverStatus = await serverProxy.getStatus(server);
-    if (serverStatus?.state === 'running' || serverStatus?.state === 'starting') {
-      set.status = 409;
-      return { error: 'Server must be stopped before importing backup', code: 'SERVER_BUSY' };
-    }
-
-    if (!tempFileId || !selections) {
-      set.status = 400;
-      return { error: 'tempFileId and selections are required', code: 'VALIDATION_ERROR' };
-    }
-
-    try {
-      const parsed = ApplyChangesSchema.safeParse({ tempFileId, serverId: id, selections });
-      if (!parsed.success) {
-        set.status = 400;
-        return { error: 'Invalid request body', code: 'VALIDATION_ERROR', details: parsed.error.flatten() };
-      }
-
-      const result = await importManager.applyToServer(tempFileId, id, selections);
-
-      if (!result.success) {
-        set.status = 400;
-        return { error: result.error, code: result.errorCode };
-      }
-
-      return result;
-    } catch (err) {
-      if (err instanceof ImportError) {
-        set.status = err.code === 'BACKUP_NOT_FOUND' ? 404 : err.code === 'SERVER_BUSY' ? 409 : 400;
-        return { error: err.message, code: err.code, details: err.details };
-      }
-      throw err;
-    }
-  }, {
-    body: ImportApplyBody,
-    detail: {
-      summary: 'Apply import changes',
-      description: 'Apply selected changes from backup import to the server (server must be stopped)',
-      security: [{ bearerAuth: [] }],
-    },
-  })
-  .delete('/:id/files/import/:tempFileId', async ({ params, set }) => {
-    const { id, tempFileId } = params as { id: string; tempFileId: string };
-
-    const server = await getServer(id);
-    if (!server) {
-      set.status = 404;
-      return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
-    }
-
-    await importManager.cleanup(tempFileId);
-    return { success: true };
-  }, {
-    detail: {
-      summary: 'Cleanup import files',
-      description: 'Delete temporary import files and cleanup resources',
-      security: [{ bearerAuth: [] }],
-    },
-  });
+;
