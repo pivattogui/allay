@@ -6,8 +6,7 @@ import { FileTree } from './FileTree';
 import { FileEditor } from './FileEditor';
 import { FileBreadcrumb } from './FileBreadcrumb';
 import { FileUploader } from './FileUploader';
-import { ImportBackupModal } from './ImportBackupModal';
-import { FolderPlus, Upload, RefreshCw, FolderOpen, FileArchive } from 'lucide-react';
+import { FolderPlus, Upload, RefreshCw, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface FileEntry {
@@ -37,8 +36,6 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-
   const fetchEntries = useCallback(async (path: string = '') => {
     setLoading(true);
     try {
@@ -334,10 +331,6 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
             <Upload className="h-4 w-4 mr-2" />
             Upload
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-            <FileArchive className="h-4 w-4 mr-2" />
-            Import Backup
-          </Button>
         </div>
       </div>
 
@@ -415,13 +408,6 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
         onUploadComplete={() => fetchEntries(currentPath)}
       />
 
-      {/* Import Backup Modal */}
-      <ImportBackupModal
-        serverId={serverId}
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onSuccess={() => fetchEntries(currentPath)}
-      />
     </div>
   );
 }

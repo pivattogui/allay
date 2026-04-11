@@ -14,7 +14,6 @@ export interface Server {
   ramMinMb: number;
   ramMaxMb: number;
   status: ServerStatus;
-  nodeId: string | null;
 }
 
 export interface ServerMetrics {
@@ -34,18 +33,5 @@ export interface Backup {
   id: string;
   name: string;
   size: number;
-  createdAt: string;
-}
-
-export interface Node {
-  id: string;
-  name: string;
-  host: string;
-  port: number;
-  status: 'online' | 'offline';
-  cpuCores?: number;
-  ramTotalMb?: number;
-  diskTotalGb?: number;
-  lastHeartbeat?: string;
   createdAt: string;
 }

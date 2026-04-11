@@ -11,10 +11,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { ArrowLeft, Server, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Server, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCreateServer } from '@/hooks/useServerActions'
-import { fetchNodes, type Node } from '@/lib/api'
 
 interface ServerType {
   id: string
@@ -32,11 +31,6 @@ export function CreateServerPage() {
   const [port, setPort] = useState('25565')
   const [ramMin, setRamMin] = useState('1024')
   const [ramMax, setRamMax] = useState('2048')
-  const [nodeId, setNodeId] = useState<string>('')
-
-  // Nodes fetched from API
-  const [nodes, setNodes] = useState<Node[]>([])
-  const [loadingNodes, setLoadingNodes] = useState(true)
 
   // Server types fetched from API
   const [serverTypes, setServerTypes] = useState<ServerType[]>([])
@@ -47,26 +41,6 @@ export function CreateServerPage() {
   const [loadingVersions, setLoadingVersions] = useState(false)
 
   const loading = createServerMutation.isPending
-
-  // Fetch nodes on mount
-  useEffect(() => {
-    const loadNodes = async () => {
-      try {
-        const nodeList = await fetchNodes()
-        setNodes(nodeList)
-        // Auto-select if only one online node
-        const onlineNodes = nodeList.filter(n => n.status === 'online')
-        if (onlineNodes.length === 1) {
-          setNodeId(onlineNodes[0].id)
-        }
-      } catch (err) {
-        console.error('Failed to fetch nodes:', err)
-      } finally {
-        setLoadingNodes(false)
-      }
-    }
-    loadNodes()
-  }, [])
 
   // Fetch server types on mount
   useEffect(() => {
@@ -157,7 +131,6 @@ export function CreateServerPage() {
         port: portNum,
         ramMinMb: ramMinNum,
         ramMaxMb: ramMaxNum,
-        nodeId: nodeId || undefined,
       })
       toast.success('Server created successfully')
       navigate('/servers')
@@ -190,48 +163,6 @@ export function CreateServerPage() {
       {/* Form */}
       <div className="max-w-2xl mx-auto p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Node Selection */}
-          {!loadingNodes && nodes.filter(n => n.status === 'online').length === 0 && (
-            <Card className="border-destructive/50 bg-destructive/5">
-              <CardContent className="py-4">
-                <div className="flex items-center gap-3">
-                  <AlertCircle className="h-5 w-5 text-destructive" />
-                  <div>
-                    <p className="text-sm font-medium text-destructive">No agents available</p>
-                    <p className="text-xs text-muted-foreground">
-                      Start an agent on your machine to create servers.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {nodes.filter(n => n.status === 'online').length > 1 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Target Node</CardTitle>
-                <CardDescription>Select which machine will run this server</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Select value={nodeId || undefined} onValueChange={setNodeId} disabled={loading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Auto-select (first available)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {nodes
-                      .filter(n => n.status === 'online')
-                      .map((n) => (
-                        <SelectItem key={n.id} value={n.id}>
-                          {n.name} ({n.host}:{n.port})
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Basic Info */}
           <Card>
             <CardHeader>
