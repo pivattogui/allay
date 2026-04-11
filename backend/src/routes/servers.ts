@@ -6,8 +6,7 @@ import { db } from '../db/index.js';
 import { servers, backupConfigs, events } from '../db/schema.js';
 import { config } from '../config.js';
 import { jarManager } from '../modules/servers/jar-manager.js';
-import * as serverProxy from '../modules/agent/server-proxy.js';
-import { nodeManager } from '../modules/agent/node-manager.js';
+import { processManager } from '../modules/process/index.js';
 import {
   CreateServerSchema,
   UpdateServerSchema,
@@ -61,12 +60,10 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
   .get('/', async () => {
     const rows = await db.select().from(servers).orderBy(desc(servers.createdAt));
 
-    const serversWithStatus: ServerWithStatus[] = await Promise.all(
-      rows.map(async (server) => ({
-        ...server,
-        status: await serverProxy.getStatus(server),
-      }))
-    );
+    const serversWithStatus: ServerWithStatus[] = rows.map((server) => ({
+      ...server,
+      status: processManager.getStatus(server.id),
+    }));
 
     return { servers: serversWithStatus };
   }, {
@@ -93,7 +90,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     return {
       server: {
         ...server,
-        status: await serverProxy.getStatus(server),
+        status: processManager.getStatus(server.id),
       },
     };
   }, {
@@ -134,50 +131,18 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     }
 
     const id = uuidv4();
+    const directory = path.join(config.paths.servers, id);
 
-    // Auto-assign node if not provided - agent is required
-    let nodeId: string | null = input.nodeId ?? null;
-    if (!nodeId) {
-      const allNodes = await nodeManager.getAllNodes();
-      const onlineNode = allNodes.find(n => n.status === 'online');
-      if (!onlineNode) {
-        set.status = 400;
-        return { error: 'No online nodes available. Start an agent first.', code: 'NO_NODES_AVAILABLE' };
-      }
-      nodeId = onlineNode.id;
-    }
-
-    // Verify node exists and is online
-    const node = await nodeManager.getNode(nodeId);
-    if (!node) {
-      set.status = 400;
-      return { error: 'Node not found', code: 'NODE_NOT_FOUND' };
-    }
-    if (node.status !== 'online') {
-      set.status = 400;
-      return { error: 'Node is offline', code: 'NODE_OFFLINE' };
-    }
-
-    // Agent handles directory creation - use agent's data dir
-    const directory = `servers/${id}`;
-
-    // Provision on agent — agent handles JAR download, directory creation, etc.
     try {
-      const client = await nodeManager.getClientForNode(nodeId);
-      await client.downloadJar(input.type, input.version);
-      await client.provisionServer({
-        id,
-        name: input.name,
-        type: input.type,
-        version: input.version,
-        port: input.port,
-        ramMin: input.ramMinMb,
-        ramMax: input.ramMaxMb,
-      });
+      const jarPath = await jarManager.download(input.type, input.version);
+      fs.mkdirSync(directory, { recursive: true });
+      fs.copyFileSync(jarPath, path.join(directory, 'server.jar'));
+      fs.writeFileSync(path.join(directory, 'eula.txt'), 'eula=true\n');
+      fs.writeFileSync(path.join(directory, 'server.properties'), `server-port=${input.port}\n`);
     } catch (err: any) {
-      console.error('Agent provisioning failed:', err);
+      console.error('Server provisioning failed:', err);
       set.status = 500;
-      return { error: `Agent provisioning failed: ${err.message}`, code: 'AGENT_PROVISION_FAILED' };
+      return { error: `Server provisioning failed: ${err.message}`, code: 'PROVISION_FAILED' };
     }
 
     await db.insert(servers).values({
@@ -191,7 +156,6 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       directory,
       autoStart: input.autoStart,
       autoRestart: input.autoRestart,
-      nodeId,
     });
 
     await db.insert(backupConfigs).values({
@@ -214,7 +178,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     return {
       server: {
         ...server!,
-        status: await serverProxy.getStatus(server!),
+        status: processManager.getStatus(server!.id),
       },
     };
   }, {
@@ -255,19 +219,11 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         return { error: 'Port already in use by another server', code: 'PORT_IN_USE' };
       }
 
-      if (server.nodeId) {
-        try {
-          const rawProps = await serverProxy.readProperties(server);
-          const updatedProps = rawProps.replace(/server-port=\d+/, `server-port=${input.port}`);
-          await serverProxy.writeProperties(server, updatedProps);
-        } catch { /* agent may not have server.properties yet */ }
-      } else {
-        const propsPath = path.join(server.directory, 'server.properties');
-        if (fs.existsSync(propsPath)) {
-          let props = fs.readFileSync(propsPath, 'utf-8');
-          props = props.replace(/server-port=\d+/, `server-port=${input.port}`);
-          fs.writeFileSync(propsPath, props);
-        }
+      const propsPath = path.join(server.directory, 'server.properties');
+      if (fs.existsSync(propsPath)) {
+        let props = fs.readFileSync(propsPath, 'utf-8');
+        props = props.replace(/server-port=\d+/, `server-port=${input.port}`);
+        fs.writeFileSync(propsPath, props);
       }
     }
 
@@ -288,7 +244,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     return {
       server: {
         ...updatedServer!,
-        status: await serverProxy.getStatus(updatedServer!),
+        status: processManager.getStatus(updatedServer!.id),
       },
     };
   }, {
@@ -315,13 +271,9 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = await serverProxy.getStatus(server);
+    const status = processManager.getStatus(server.id);
     if (status.state === 'running' || status.state === 'starting') {
-      await serverProxy.stopServer(server);
-    }
-
-    if (server.nodeId) {
-      try { await serverProxy.deprovisionOnAgent(server); } catch { /* agent may be offline */ }
+      await processManager.stop(server.id);
     }
 
     if (fs.existsSync(server.directory)) {
@@ -353,16 +305,16 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = await serverProxy.getStatus(server);
+    const status = processManager.getStatus(server.id);
     if (status.state === 'running' || status.state === 'starting') {
       set.status = 400;
       return { error: 'Server is already running', code: 'SERVER_ALREADY_RUNNING' };
     }
 
     try {
-      await serverProxy.startServer(server);
+      await processManager.start(server as any);
       await db.insert(events).values({ serverId: id, type: 'start', message: 'Server started' });
-      return { message: 'Server starting', status: await serverProxy.getStatus(server) };
+      return { message: 'Server starting', status: processManager.getStatus(server.id) };
     } catch (err) {
       console.error(err);
       set.status = 500;
@@ -392,16 +344,16 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = await serverProxy.getStatus(server);
+    const status = processManager.getStatus(server.id);
     if (status.state === 'stopped' || status.state === 'stopping') {
       set.status = 400;
       return { error: 'Server is not running', code: 'SERVER_NOT_RUNNING' };
     }
 
     try {
-      await serverProxy.stopServer(server);
+      await processManager.stop(server.id);
       await db.insert(events).values({ serverId: id, type: 'stop', message: 'Server stopped' });
-      return { message: 'Server stopped', status: await serverProxy.getStatus(server) };
+      return { message: 'Server stopped', status: processManager.getStatus(server.id) };
     } catch (err) {
       console.error(err);
       set.status = 500;
@@ -431,8 +383,8 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    await serverProxy.killServer(server);
-    return { message: 'Server killed', status: await serverProxy.getStatus(server) };
+    processManager.kill(server.id);
+    return { message: 'Server killed', status: processManager.getStatus(server.id) };
   }, {
     params: IdParam,
     response: {
@@ -455,7 +407,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    return { status: await serverProxy.getStatus(server) };
+    return { status: processManager.getStatus(server.id) };
   }, {
     params: IdParam,
     response: {
@@ -479,7 +431,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const logs = await serverProxy.getLogs(server, lines);
+    const logs = processManager.getLogs(server.id, lines);
     return { logs };
   }, {
     params: IdParam,
@@ -512,14 +464,14 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = await serverProxy.getStatus(server);
+    const status = processManager.getStatus(server.id);
     if (status.state !== 'running') {
       set.status = 400;
       return { error: 'Server is not running', code: 'SERVER_NOT_RUNNING' };
     }
 
-    const result = await serverProxy.sendCommand(server, command);
-    if (!result.sent) {
+    const sent = processManager.sendCommand(server.id, command);
+    if (!sent) {
       set.status = 500;
       return { error: 'Failed to send command', code: 'COMMAND_FAILED' };
     }
@@ -550,20 +502,11 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    let content: string;
-    if (server.nodeId) {
-      try {
-        content = await serverProxy.readProperties(server);
-      } catch {
-        return { properties: {} };
-      }
-    } else {
-      const propsPath = path.join(server.directory, 'server.properties');
-      if (!fs.existsSync(propsPath)) {
-        return { properties: {} };
-      }
-      content = fs.readFileSync(propsPath, 'utf-8');
+    const propsPath = path.join(server.directory, 'server.properties');
+    if (!fs.existsSync(propsPath)) {
+      return { properties: {} };
     }
+    const content = fs.readFileSync(propsPath, 'utf-8');
 
     const properties: Record<string, string> = {};
     for (const line of content.split('\n')) {
@@ -606,12 +549,8 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     }
 
     const content = Object.entries(properties).map(([key, value]) => `${key}=${value}`).join('\n');
-    if (server.nodeId) {
-      await serverProxy.writeProperties(server, content);
-    } else {
-      const propsPath = path.join(server.directory, 'server.properties');
-      fs.writeFileSync(propsPath, content);
-    }
+    const propsPath = path.join(server.directory, 'server.properties');
+    fs.writeFileSync(propsPath, content);
 
     if (properties['server-port']) {
       const newPort = parseInt(properties['server-port'], 10);
@@ -623,7 +562,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       }
     }
 
-    const status = await serverProxy.getStatus(server);
+    const status = processManager.getStatus(server.id);
     return { needsRestart: status.state === 'running' };
   }, {
     params: IdParam,
@@ -647,16 +586,6 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     if (!server) {
       set.status = 404;
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
-    }
-
-    if (server.nodeId) {
-      try {
-        const content = await serverProxy.readProperties(server);
-        return { content };
-      } catch {
-        set.status = 404;
-        return { error: 'server.properties not found', code: 'PROPERTIES_NOT_FOUND' };
-      }
     }
 
     const propsPath = path.join(server.directory, 'server.properties');
@@ -694,15 +623,11 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = await serverProxy.getStatus(server);
+    const status = processManager.getStatus(server.id);
     const needsRestart = status.state === 'running';
 
-    if (server.nodeId) {
-      await serverProxy.writeProperties(server, content);
-    } else {
-      const propsPath = path.join(server.directory, 'server.properties');
-      fs.writeFileSync(propsPath, content);
-    }
+    const propsPath = path.join(server.directory, 'server.properties');
+    fs.writeFileSync(propsPath, content);
 
     const portMatch = content.match(/server-port=(\d+)/);
     if (portMatch) {
@@ -820,7 +745,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     const [updatedServer] = await db.select().from(servers).where(eq(servers.id, id)).limit(1);
     const s = updatedServer!;
 
-    const status = await serverProxy.getStatus(updatedServer!);
+    const status = processManager.getStatus(updatedServer!.id);
     const needsRestart = status.state === 'running' && (
       input.ramMinMb !== undefined ||
       input.ramMaxMb !== undefined ||
@@ -893,12 +818,8 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
 
     try {
       const processed = await sharp(buffer).resize(64, 64, { fit: 'cover' }).png().toBuffer();
-      if (server.nodeId) {
-        await serverProxy.writeIcon(server, processed);
-      } else {
-        const iconPath = path.join(server.directory, 'server-icon.png');
-        fs.writeFileSync(iconPath, processed);
-      }
+      const iconPath = path.join(server.directory, 'server-icon.png');
+      fs.writeFileSync(iconPath, processed);
     } catch (err) {
       console.error(err);
       set.status = 500;
@@ -932,18 +853,6 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Icon not found', code: 'ICON_NOT_FOUND' };
     }
 
-    if (server.nodeId) {
-      try {
-        const resp = await serverProxy.readIcon(server);
-        set.headers['Content-Type'] = 'image/png';
-        set.headers['Cache-Control'] = 'public, max-age=3600';
-        return new Response(resp.body, { headers: { 'Content-Type': 'image/png' } });
-      } catch {
-        set.status = 404;
-        return { error: 'Icon not found', code: 'ICON_NOT_FOUND' };
-      }
-    }
-
     const iconPath = path.join(server.directory, 'server-icon.png');
     if (!fs.existsSync(iconPath)) {
       set.status = 404;
@@ -973,13 +882,9 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    if (server.nodeId) {
-      try { await serverProxy.deleteIcon(server); } catch { /* icon may not exist */ }
-    } else {
-      const iconPath = path.join(server.directory, 'server-icon.png');
-      if (fs.existsSync(iconPath)) {
-        fs.unlinkSync(iconPath);
-      }
+    const iconPath = path.join(server.directory, 'server-icon.png');
+    if (fs.existsSync(iconPath)) {
+      fs.unlinkSync(iconPath);
     }
 
     await db.update(servers).set({ iconPath: null, updatedAt: new Date() }).where(eq(servers.id, id));
@@ -1018,7 +923,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
     }
 
-    const status = await serverProxy.getStatus(server);
+    const status = processManager.getStatus(server.id);
     if (status.state === 'running' || status.state === 'starting') {
       set.status = 400;
       return { error: 'Server must be stopped before migration', code: 'SERVER_RUNNING' };
@@ -1038,21 +943,12 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     }
 
     try {
-      if (server.nodeId) {
-        const client = await nodeManager.getClientForNode(server.nodeId);
-        await client.downloadJar(type, version);
-        const jarData = fs.readFileSync(path.join(config.paths.jars, type, `${version}.jar`));
-        await client.writeFile(server.id, 'server.jar', jarData);
-      } else {
-        console.info(`Downloading ${type} server JAR version ${version}...`);
-        const jarPath = await jarManager.download(type as 'vanilla' | 'paper', version);
-
-        const serverJarPath = path.join(server.directory, 'server.jar');
-        if (fs.existsSync(serverJarPath)) {
-          fs.unlinkSync(serverJarPath);
-        }
-        fs.copyFileSync(jarPath, serverJarPath);
+      const jarPath = await jarManager.download(type as 'vanilla' | 'paper', version);
+      const serverJarPath = path.join(server.directory, 'server.jar');
+      if (fs.existsSync(serverJarPath)) {
+        fs.unlinkSync(serverJarPath);
       }
+      fs.copyFileSync(jarPath, serverJarPath);
     } catch (err) {
       console.error(err);
       set.status = 500;
