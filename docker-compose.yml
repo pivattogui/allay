@@ -1,0 +1,69 @@
+# Allay - Docker Compose
+#
+# Usage:
+#   docker compose up -d              # Start all (dev)
+#   docker compose up -d postgres     # Start database only
+#   docker compose logs -f backend    # Follow backend logs
+#   docker compose down               # Stop all
+#
+# Production:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-allay}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-allay}
+      POSTGRES_DB: ${DB_NAME:-allay}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-allay}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-allay}:${DB_PASSWORD:-allay}@postgres:5432/${DB_NAME:-allay}
+      JWT_SECRET: ${JWT_SECRET:-development-secret-change-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      DATA_DIR: /app/data
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - backend-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      VITE_API_URL: http://backend:3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  backend-data:
