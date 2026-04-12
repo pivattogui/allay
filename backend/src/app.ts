@@ -97,6 +97,18 @@ export async function initializeServices() {
   await backupManager.initializeSchedules();
   await restartScheduler.initialize();
 
+  // Auto-start servers
+  const autoStartServers = await db.select().from(servers).where(eq(servers.autoStart, true));
+  for (const server of autoStartServers) {
+    try {
+      console.info(`[AutoStart] Starting server ${server.name} (${server.id})`);
+      await processManager.start(server as any);
+      console.info(`[AutoStart] Server ${server.name} started successfully`);
+    } catch (err) {
+      console.error(`[AutoStart] Failed to start server ${server.name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   restartScheduler.on('server:restart-scheduled', async (serverId: string) => {
     const status = processManager.getStatus(serverId);
     if (status.state === 'running') {
