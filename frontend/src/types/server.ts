@@ -31,7 +31,8 @@ export interface LogEntry {
 
 export interface Backup {
   id: string;
-  name: string;
-  size: number;
+  filename: string;
+  sizeBytes: number;
+  type: 'manual' | 'scheduled';
   createdAt: string;
 }

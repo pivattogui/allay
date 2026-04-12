@@ -172,9 +172,9 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
                       <Archive className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">{backup.name}</p>
+                      <p className="font-medium text-foreground">{backup.filename}</p>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>{formatBytes(backup.size)}</span>
+                        <span>{formatBytes(backup.sizeBytes)}</span>
                         <span>·</span>
                         <span>{formatDate(backup.createdAt)}</span>
                       </div>
@@ -196,18 +196,18 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.name)}>
+                      <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.filename)}>
                         <Download className="mr-2 h-4 w-4" />
                         Download
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleRestoreBackup(backup.id, backup.name)}>
+                      <DropdownMenuItem onClick={() => handleRestoreBackup(backup.id, backup.filename)}>
                         <RotateCcw className="mr-2 h-4 w-4" />
                         Restore
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onClick={() => handleDeleteBackup(backup.id, backup.name)}
+                        onClick={() => handleDeleteBackup(backup.id, backup.filename)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete

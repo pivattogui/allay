@@ -339,10 +339,10 @@ export function BackupSection({ serverId }: BackupSectionProps) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">
-                          {backup.name}
+                          {backup.filename}
                         </p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{formatBytes(backup.size)}</span>
+                          <span>{formatBytes(backup.sizeBytes)}</span>
                           <span>·</span>
                           <span title={formatFullDate(backup.createdAt)}>
                             {formatDate(backup.createdAt)}
@@ -368,18 +368,18 @@ export function BackupSection({ serverId }: BackupSectionProps) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.name)}>
+                        <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.filename)}>
                           <Download className="mr-2 h-4 w-4" />
                           Download
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleRestoreBackup(backup.id, backup.name)}>
+                        <DropdownMenuItem onClick={() => handleRestoreBackup(backup.id, backup.filename)}>
                           <RotateCcw className="mr-2 h-4 w-4" />
                           Restore
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
-                          onClick={() => handleDeleteBackup(backup.id, backup.name)}
+                          onClick={() => handleDeleteBackup(backup.id, backup.filename)}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete
