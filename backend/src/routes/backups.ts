@@ -9,6 +9,7 @@ import { db } from '../db/index.js';
 import { servers, backups } from '../db/schema.js';
 import { backupManager } from '../modules/backups/index.js';
 import { processManager } from '../modules/process/index.js';
+import { jarManager } from '../modules/servers/jar-manager.js';
 
 import { config } from '../config.js';
 import type { JwtPayload } from '../types/index.js';
@@ -337,19 +338,81 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
         fs.rmSync(macosDir, { recursive: true, force: true });
       }
 
-      // Rename JAR to server.jar if needed
+      // Detect if import is a world-only backup (no server files)
+      const extractedFiles = fs.readdirSync(serverDir);
+      const hasJar = extractedFiles.some(f => f.endsWith('.jar'));
+      const hasServerProperties = extractedFiles.includes('server.properties');
+      const hasWorldData = extractedFiles.includes('level.dat') || extractedFiles.includes('region') || extractedFiles.includes('world');
+
+      if (!hasJar && !hasServerProperties && hasWorldData) {
+        // World-only backup — move everything into world/ and restore server files from safety backup
+        console.info('[Import] Detected world-only backup, restructuring...');
+        const worldDir = path.join(serverDir, 'world');
+        fs.mkdirSync(worldDir, { recursive: true });
+        for (const file of fs.readdirSync(serverDir)) {
+          if (file === 'world' || file === 'eula.txt') continue;
+          fs.renameSync(path.join(serverDir, file), path.join(worldDir, file));
+        }
+
+        // Restore server.jar and server.properties from safety backup
+        const [safetyBackup] = await db.select().from(backups).where(eq(backups.id, backupId)).limit(1);
+        if (safetyBackup) {
+          const safetyPath = path.join(config.paths.backups, safetyBackup.filename);
+          if (fs.existsSync(safetyPath)) {
+            const extractDir = path.join(config.paths.temp, `restore-${randomUUID()}`);
+            fs.mkdirSync(extractDir, { recursive: true });
+            await tar.extract({ cwd: extractDir, file: safetyPath });
+
+            // Find the server dir inside the extracted backup
+            const extractedDirs = fs.readdirSync(extractDir);
+            const backupServerDir = extractedDirs.length === 1
+              ? path.join(extractDir, extractedDirs[0])
+              : extractDir;
+
+            for (const essential of ['server.jar', 'server.properties']) {
+              const src = path.join(backupServerDir, essential);
+              if (fs.existsSync(src)) {
+                fs.copyFileSync(src, path.join(serverDir, essential));
+                console.info(`[Import] Restored ${essential} from safety backup`);
+              }
+            }
+            fs.rmSync(extractDir, { recursive: true, force: true });
+          }
+        }
+      } else {
+        // Full server backup — rename JAR to server.jar if needed
+        if (!fs.existsSync(path.join(serverDir, 'server.jar'))) {
+          const files = fs.readdirSync(serverDir);
+          const jarFile = files.find(f => f.endsWith('.jar'));
+          if (jarFile) {
+            fs.renameSync(path.join(serverDir, jarFile), path.join(serverDir, 'server.jar'));
+            console.info(`[Import] Renamed ${jarFile} to server.jar`);
+          }
+        }
+      }
+
+      // Final validation — server.jar must exist
       if (!fs.existsSync(path.join(serverDir, 'server.jar'))) {
-        const files = fs.readdirSync(serverDir);
-        const jarFile = files.find(f => f.endsWith('.jar'));
-        if (jarFile) {
-          fs.renameSync(path.join(serverDir, jarFile), path.join(serverDir, 'server.jar'));
-          console.info(`[Import] Renamed ${jarFile} to server.jar`);
+        console.error('[Import] server.jar missing after import — server will not start');
+        // Try to download from jarManager as last resort
+        try {
+          const jarPath = await jarManager.download(server.type as 'vanilla' | 'paper', server.version);
+          fs.copyFileSync(jarPath, path.join(serverDir, 'server.jar'));
+          console.info(`[Import] Downloaded fresh server.jar (${server.type} ${server.version})`);
+        } catch (jarErr) {
+          console.error('[Import] Failed to download server.jar:', jarErr);
         }
       }
 
       // Ensure eula.txt
       const eulaPath = path.join(serverDir, 'eula.txt');
       fs.writeFileSync(eulaPath, 'eula=true\n');
+
+      // Ensure server.properties exists
+      if (!fs.existsSync(path.join(serverDir, 'server.properties'))) {
+        fs.writeFileSync(path.join(serverDir, 'server.properties'), `server-port=${server.port}\n`);
+        console.info('[Import] Created default server.properties');
+      }
 
       fs.rmSync(tempDir, { recursive: true, force: true });
 
