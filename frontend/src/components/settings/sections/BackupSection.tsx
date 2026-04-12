@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
-import { useBackups, useCreateBackup, useRestoreBackup, useDeleteBackup } from '@/hooks/useBackups'
+import { useBackups, useCreateBackup, useRestoreBackup, useDeleteBackup, useUpdateBackupConfig } from '@/hooks/useBackups'
+import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import {
   Archive,
@@ -12,8 +14,6 @@ import {
   Trash2,
   Loader2,
   Download,
-  HardDrive,
-  Clock,
   MoreVertical
 } from 'lucide-react'
 import {
@@ -74,6 +74,7 @@ export function BackupSection({ serverId }: BackupSectionProps) {
   const createBackupMutation = useCreateBackup(serverId)
   const restoreBackupMutation = useRestoreBackup(serverId)
   const deleteBackupMutation = useDeleteBackup(serverId)
+  const updateConfigMutation = useUpdateBackupConfig(serverId)
 
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
@@ -83,6 +84,34 @@ export function BackupSection({ serverId }: BackupSectionProps) {
     intervalMinutes: 60,
     maxBackups: 10,
     includeLogs: false,
+  }
+
+  const [editEnabled, setEditEnabled] = useState(config.enabled)
+  const [editInterval, setEditInterval] = useState(String(config.intervalMinutes))
+  const [editMaxBackups, setEditMaxBackups] = useState(String(config.maxBackups))
+  const [editIncludeLogs, setEditIncludeLogs] = useState(config.includeLogs)
+
+  useEffect(() => {
+    if (data?.config) {
+      setEditEnabled(data.config.enabled)
+      setEditInterval(String(data.config.intervalMinutes))
+      setEditMaxBackups(String(data.config.maxBackups))
+      setEditIncludeLogs(data.config.includeLogs)
+    }
+  }, [data?.config])
+
+  const handleSaveConfig = async () => {
+    try {
+      await updateConfigMutation.mutateAsync({
+        enabled: editEnabled,
+        intervalMinutes: parseInt(editInterval, 10) || 60,
+        maxBackups: parseInt(editMaxBackups, 10) || 10,
+        includeLogs: editIncludeLogs,
+      })
+      toast.success('Backup configuration updated')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update config')
+    }
   }
 
   const handleCreateBackup = async () => {
@@ -193,37 +222,76 @@ export function BackupSection({ serverId }: BackupSectionProps) {
         </p>
       </div>
 
-      {/* Storage Info */}
+      {/* Backup Settings */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-              <HardDrive className="h-5 w-5 text-muted-foreground" />
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="backup-enabled" className="text-sm font-medium">Automatic Backups</Label>
+              <p className="text-xs text-muted-foreground">Schedule periodic backups automatically</p>
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <p className="font-medium">Storage Location</p>
-                {config.enabled && (
-                  <Badge variant="outline" className="text-xs">
-                    Auto-backup enabled
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {config.storagePath || 'Default backup directory'}
-              </p>
-              <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  <span>Every {config.intervalMinutes} minutes</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Archive className="h-3 w-3" />
-                  <span>Keep {config.maxBackups} backups</span>
-                </div>
-              </div>
-            </div>
+            <Switch
+              id="backup-enabled"
+              checked={editEnabled}
+              onCheckedChange={setEditEnabled}
+            />
           </div>
+
+          {editEnabled && (
+            <div className="space-y-3 pt-2 border-t">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="interval" className="text-xs">Interval (minutes)</Label>
+                  <Input
+                    id="interval"
+                    type="number"
+                    min={5}
+                    max={1440}
+                    value={editInterval}
+                    onChange={(e) => setEditInterval(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="max-backups" className="text-xs">Max backups to keep</Label>
+                  <Input
+                    id="max-backups"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={editMaxBackups}
+                    onChange={(e) => setEditMaxBackups(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="include-logs" className="text-xs">Include logs</Label>
+                  <p className="text-xs text-muted-foreground">Include server log files in backups</p>
+                </div>
+                <Switch
+                  id="include-logs"
+                  checked={editIncludeLogs}
+                  onCheckedChange={setEditIncludeLogs}
+                />
+              </div>
+            </div>
+          )}
+
+          <Button
+            onClick={handleSaveConfig}
+            disabled={updateConfigMutation.isPending}
+            size="sm"
+          >
+            {updateConfigMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
         </CardContent>
       </Card>
 
