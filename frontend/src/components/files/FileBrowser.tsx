@@ -1,13 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { FileTree } from './FileTree';
 import { FileEditor } from './FileEditor';
 import { FileBreadcrumb } from './FileBreadcrumb';
 import { FileUploader } from './FileUploader';
-import { FolderPlus, Upload, RefreshCw, FolderOpen } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { FolderPlus, Upload, RefreshCw, FolderOpen, FileArchive, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { importBackup } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { serverKeys } from '@/lib/queryKeys';
 
 export interface FileEntry {
   name: string;
@@ -36,6 +47,44 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+
+  // Import state
+  const queryClient = useQueryClient();
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importing, setImporting] = useState(false);
+
+  const handleImportSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImportFile(file);
+      setImportOpen(true);
+    }
+    if (importInputRef.current) importInputRef.current.value = '';
+  }, []);
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    setImportProgress(0);
+
+    try {
+      const result = await importBackup(serverId, importFile, setImportProgress);
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: serverKeys.backups(serverId) });
+      setImportOpen(false);
+      setImportFile(null);
+      fetchEntries(currentPath);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Import failed');
+    } finally {
+      setImporting(false);
+      setImportProgress(0);
+    }
+  };
+
   const fetchEntries = useCallback(async (path: string = '') => {
     setLoading(true);
     try {
@@ -331,6 +380,17 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
             <Upload className="h-4 w-4 mr-2" />
             Upload
           </Button>
+          <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()}>
+            <FileArchive className="h-4 w-4 mr-2" />
+            Import Backup
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".tar.gz,.tgz,.zip"
+            className="hidden"
+            onChange={handleImportSelect}
+          />
         </div>
       </div>
 
@@ -407,6 +467,68 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
         onOpenChange={setUploadOpen}
         onUploadComplete={() => fetchEntries(currentPath)}
       />
+
+      {/* Import Backup Dialog */}
+      <Dialog open={importOpen} onOpenChange={(open) => {
+        if (!importing) {
+          setImportOpen(open);
+          if (!open) setImportFile(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import Backup</DialogTitle>
+            <DialogDescription>
+              This will create a safety backup of the current server, then replace all content with the imported archive.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {importFile && (
+              <div className="text-sm">
+                <p className="font-medium">{importFile.name}</p>
+                <p className="text-muted-foreground">
+                  {(importFile.size / 1024 / 1024).toFixed(1)} MB
+                </p>
+              </div>
+            )}
+
+            {importing && (
+              <div className="space-y-2">
+                <Progress value={importProgress} />
+                <p className="text-xs text-muted-foreground text-center">
+                  {importProgress < 100 ? `Uploading... ${importProgress}%` : 'Extracting and applying...'}
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportFile(null);
+                }}
+                disabled={importing}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleImport}
+                disabled={importing || !importFile}
+              >
+                {importing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  'Import'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
