@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -8,16 +8,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Archive, Plus, MoreVertical, RotateCcw, Trash2, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface Backup {
-  id: number;
-  filename: string;
-  sizeBytes: number;
-  createdAt: string;
-}
+import { useBackups, useCreateBackup, useRestoreBackup, useDeleteBackup } from '@/hooks/useBackups';
 
 interface BackupListProps {
   serverId: string;
@@ -38,107 +33,58 @@ function formatDate(dateString: string): string {
 }
 
 export function BackupList({ serverId, serverName: _serverName }: BackupListProps) {
-  const [backups, setBackups] = useState<Backup[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const { data, isLoading } = useBackups(serverId);
+  const createBackupMutation = useCreateBackup(serverId);
+  const restoreBackupMutation = useRestoreBackup(serverId);
+  const deleteBackupMutation = useDeleteBackup(serverId);
 
-  const fetchBackups = async () => {
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const backups = data?.backups || [];
+
+  const handleCreateBackup = async () => {
+    const toastId = toast.loading('Creating backup...');
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/backups/${serverId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setBackups(data.backups || data || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch backups:', err);
-      toast.error('Failed to load backups');
-    } finally {
-      setLoading(false);
+      await createBackupMutation.mutateAsync('manual');
+      toast.success('Backup created successfully', { id: toastId });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create backup', { id: toastId });
     }
   };
 
-  useEffect(() => {
-    fetchBackups();
-  }, [serverId]);
-
-  const createBackup = async () => {
-    setCreating(true);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/backups/${serverId}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        toast.success('Backup created successfully');
-        fetchBackups();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || 'Failed to create backup');
-      }
-    } catch (err) {
-      toast.error('Failed to create backup');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const restoreBackup = async (backupId: number) => {
-    if (!confirm('Are you sure you want to restore this backup? This will overwrite current server data.')) {
+  const handleRestoreBackup = async (backupId: string, filename: string) => {
+    if (!confirm(`Are you sure you want to restore backup "${filename}"? This will overwrite current server data.`)) {
       return;
     }
 
     setActionLoading(backupId);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/backups/${serverId}/${backupId}/restore`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        toast.success('Backup restored successfully');
-      } else {
-        const data = await res.json();
-        toast.error(data.error || 'Failed to restore backup');
-      }
-    } catch (err) {
-      toast.error('Failed to restore backup');
+      await restoreBackupMutation.mutateAsync(backupId);
+      toast.success('Backup restored successfully');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to restore backup');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const deleteBackup = async (backupId: number) => {
-    if (!confirm('Are you sure you want to delete this backup?')) {
+  const handleDeleteBackup = async (backupId: string, filename: string) => {
+    if (!confirm(`Are you sure you want to delete backup "${filename}"?`)) {
       return;
     }
 
     setActionLoading(backupId);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/backups/${serverId}/${backupId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        toast.success('Backup deleted successfully');
-        fetchBackups();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || 'Failed to delete backup');
-      }
-    } catch (err) {
-      toast.error('Failed to delete backup');
+      await deleteBackupMutation.mutateAsync(backupId);
+      toast.success('Backup deleted successfully');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete backup');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const downloadBackup = async (backupId: number, filename: string) => {
+  const handleDownloadBackup = async (backupId: string, filename: string) => {
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`/api/backups/${serverId}/${backupId}/download`, {
@@ -158,12 +104,12 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
         const data = await res.json();
         toast.error(data.error || 'Failed to download backup');
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to download backup');
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
@@ -189,8 +135,8 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
             {backups.length} backup{backups.length !== 1 ? 's' : ''} available
           </p>
         </div>
-        <Button onClick={createBackup} disabled={creating}>
-          {creating ? (
+        <Button onClick={handleCreateBackup} disabled={createBackupMutation.isPending}>
+          {createBackupMutation.isPending ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Creating...
@@ -212,7 +158,7 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
           description="Create your first backup to protect your server data"
           action={{
             label: 'Create Backup',
-            onClick: createBackup,
+            onClick: handleCreateBackup,
           }}
         />
       ) : (
@@ -226,9 +172,9 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
                       <Archive className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">{backup.filename}</p>
+                      <p className="font-medium text-foreground">{backup.name}</p>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>{formatBytes(backup.sizeBytes)}</span>
+                        <span>{formatBytes(backup.size)}</span>
                         <span>·</span>
                         <span>{formatDate(backup.createdAt)}</span>
                       </div>
@@ -250,17 +196,18 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => downloadBackup(backup.id, backup.filename)}>
+                      <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.name)}>
                         <Download className="mr-2 h-4 w-4" />
                         Download
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => restoreBackup(backup.id)}>
+                      <DropdownMenuItem onClick={() => handleRestoreBackup(backup.id, backup.name)}>
                         <RotateCcw className="mr-2 h-4 w-4" />
                         Restore
                       </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onClick={() => deleteBackup(backup.id)}
+                        onClick={() => handleDeleteBackup(backup.id, backup.name)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete
