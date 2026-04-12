@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import * as tar from 'tar';
-import unzipper from 'unzipper';
 import { db } from '../db/index.js';
 import { servers, backups } from '../db/schema.js';
 import { backupManager } from '../modules/backups/index.js';
@@ -305,11 +304,15 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
       if (isTarGz) {
         await tar.extract({ cwd: serverDir, file: tempPath });
       } else {
-        const stream = fs.createReadStream(tempPath).pipe(unzipper.Extract({ path: serverDir }));
-        await new Promise<void>((resolve, reject) => {
-          stream.on('close', resolve);
-          stream.on('error', reject);
+        const proc = Bun.spawn(['unzip', '-o', '-q', tempPath, '-d', serverDir], {
+          stdout: 'ignore',
+          stderr: 'pipe',
         });
+        const exitCode = await proc.exited;
+        if (exitCode !== 0) {
+          const stderr = await new Response(proc.stderr).text();
+          throw new Error(`unzip failed (exit ${exitCode}): ${stderr.slice(0, 200)}`);
+        }
       }
 
       const extracted = fs.readdirSync(serverDir);

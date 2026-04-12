@@ -5,7 +5,7 @@ WORKDIR /app
 # Development stage
 FROM base AS development
 # Install Java 21 from Adoptium
-RUN apt-get update && apt-get install -y wget apt-transport-https gnupg \
+RUN apt-get update && apt-get install -y wget apt-transport-https gnupg unzip \
     && wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" > /etc/apt/sources.list.d/adoptium.list \
     && apt-get update && apt-get install -y temurin-21-jre \
@@ -27,7 +27,7 @@ RUN bun run build
 FROM base AS production
 
 # Install Java 21 from Adoptium for MC servers
-RUN apt-get update && apt-get install -y wget apt-transport-https gnupg curl \
+RUN apt-get update && apt-get install -y wget apt-transport-https gnupg curl unzip \
     && wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" > /etc/apt/sources.list.d/adoptium.list \
     && apt-get update && apt-get install -y temurin-21-jre \
