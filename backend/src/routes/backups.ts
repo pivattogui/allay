@@ -1,11 +1,15 @@
 import { Elysia, t } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
+import * as tar from 'tar';
+import unzipper from 'unzipper';
 import { db } from '../db/index.js';
 import { servers, backups } from '../db/schema.js';
 import { backupManager } from '../modules/backups/index.js';
+import { processManager } from '../modules/process/index.js';
 
 import { config } from '../config.js';
 import type { JwtPayload } from '../types/index.js';
@@ -240,6 +244,114 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
     detail: {
       summary: 'Update backup config',
       description: 'Update automatic backup configuration for a server',
+      security: [{ bearerAuth: [] }],
+    },
+  })
+  .post('/:serverId/import', async ({ params, request, set }) => {
+    const { serverId } = params as { serverId: string };
+
+    const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);
+    if (!server) {
+      set.status = 404;
+      return { error: 'Server not found', code: 'SERVER_NOT_FOUND' };
+    }
+
+    const status = processManager.getStatus(serverId);
+    if (status.state === 'running' || status.state === 'starting') {
+      set.status = 409;
+      return { error: 'Server must be stopped before importing', code: 'SERVER_BUSY' };
+    }
+
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
+    if (!file) {
+      set.status = 400;
+      return { error: 'No file uploaded', code: 'NO_FILE' };
+    }
+
+    const filename = file.name.toLowerCase();
+    const isTarGz = filename.endsWith('.tar.gz') || filename.endsWith('.tgz');
+    const isZip = filename.endsWith('.zip');
+    if (!isTarGz && !isZip) {
+      set.status = 400;
+      return { error: 'Only .tar.gz, .tgz, and .zip files are supported', code: 'UNSUPPORTED_FORMAT' };
+    }
+
+    const tempId = randomUUID();
+    const tempDir = path.join(config.paths.temp, tempId);
+    fs.mkdirSync(tempDir, { recursive: true });
+    const tempPath = path.join(tempDir, file.name);
+
+    try {
+      await Bun.write(tempPath, file);
+
+      let backupId: string;
+      try {
+        const backup = await backupManager.createBackup(serverId, 'manual');
+        backupId = backup.id;
+        console.info(`[Import] Created safety-net backup ${backupId} for server ${serverId}`);
+      } catch (err) {
+        console.error('[Import] Failed to create safety-net backup:', err);
+        set.status = 500;
+        return { error: 'Failed to create safety-net backup before import', code: 'BACKUP_FAILED' };
+      }
+
+      const serverDir = server.directory;
+      const entries = fs.readdirSync(serverDir);
+      for (const entry of entries) {
+        fs.rmSync(path.join(serverDir, entry), { recursive: true, force: true });
+      }
+
+      if (isTarGz) {
+        await tar.extract({ cwd: serverDir, file: tempPath });
+      } else {
+        const stream = fs.createReadStream(tempPath).pipe(unzipper.Extract({ path: serverDir }));
+        await new Promise<void>((resolve, reject) => {
+          stream.on('close', resolve);
+          stream.on('error', reject);
+        });
+      }
+
+      const extracted = fs.readdirSync(serverDir);
+      if (extracted.length === 1) {
+        const singleEntry = path.join(serverDir, extracted[0]);
+        if (fs.statSync(singleEntry).isDirectory()) {
+          const innerFiles = fs.readdirSync(singleEntry);
+          for (const innerFile of innerFiles) {
+            fs.renameSync(
+              path.join(singleEntry, innerFile),
+              path.join(serverDir, innerFile)
+            );
+          }
+          fs.rmdirSync(singleEntry);
+          console.info(`[Import] Unwrapped nested directory: ${extracted[0]}`);
+        }
+      }
+
+      const eulaPath = path.join(serverDir, 'eula.txt');
+      fs.writeFileSync(eulaPath, 'eula=true\n');
+
+      fs.rmSync(tempDir, { recursive: true, force: true });
+
+      return { message: 'Backup imported successfully', backupId };
+    } catch (err) {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+      console.error('[Import] Failed:', err);
+      set.status = 500;
+      return {
+        error: (err as Error).message || 'Import failed',
+        code: 'IMPORT_FAILED',
+      };
+    }
+  }, {
+    params: t.Object({
+      serverId: t.String({ description: 'Server UUID' }),
+    }),
+    detail: {
+      summary: 'Import backup',
+      description: 'Import an external backup archive (.tar.gz, .tgz, .zip) into a stopped server. Creates a safety-net backup first, then replaces all server content with the archive contents.',
       security: [{ bearerAuth: [] }],
     },
   });
