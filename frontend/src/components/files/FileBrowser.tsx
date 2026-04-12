@@ -34,9 +34,10 @@ export interface FileEntry {
 interface FileBrowserProps {
   serverId: string;
   serverName: string;
+  isRunning?: boolean;
 }
 
-export function FileBrowser({ serverId }: FileBrowserProps) {
+export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -380,7 +381,15 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
             <Upload className="h-4 w-4 mr-2" />
             Upload
           </Button>
-          <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => isRunning
+              ? toast.error('Stop the server before importing a backup')
+              : importInputRef.current?.click()
+            }
+            disabled={importing}
+          >
             <FileArchive className="h-4 w-4 mr-2" />
             Import Backup
           </Button>
