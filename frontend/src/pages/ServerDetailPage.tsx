@@ -235,7 +235,7 @@ export function ServerDetailPage() {
             <ConsoleView serverId={server.id} serverName={server.name} isRunning={isRunning} />
           </TabsContent>
           <TabsContent value="backups" className="h-full m-0 overflow-auto">
-            <BackupList serverId={server.id} serverName={server.name} />
+            <BackupList serverId={server.id} />
           </TabsContent>
           <TabsContent value="files" className="h-full m-0 overflow-hidden">
             <FileBrowser serverId={server.id} serverName={server.name} isRunning={isRunning} />

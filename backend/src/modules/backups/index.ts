@@ -195,7 +195,7 @@ class BackupManager {
       filename: row.filename,
       sizeBytes: row.sizeBytes,
       type: row.type,
-      status: (row as any).status || 'completed',
+      status: row.status,
       createdAt: row.createdAt.toISOString(),
     }));
   }

@@ -14,10 +14,10 @@ import { Badge } from '@/components/ui/badge';
 import { Archive, Plus, MoreVertical, RotateCcw, Trash2, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBackups, useCreateBackup, useRestoreBackup, useDeleteBackup } from '@/hooks/useBackups';
+import { useAuthStore } from '@/stores';
 
 interface BackupListProps {
   serverId: string;
-  serverName: string;
 }
 
 function formatBytes(bytes: number | undefined | null): string {
@@ -33,7 +33,7 @@ function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleString();
 }
 
-export function BackupList({ serverId, serverName: _serverName }: BackupListProps) {
+export function BackupList({ serverId }: BackupListProps) {
   const [pollInterval, setPollInterval] = useState<number | undefined>(undefined);
   const { data, isLoading } = useBackups(serverId, pollInterval);
   const createBackupMutation = useCreateBackup(serverId);
@@ -87,9 +87,9 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
 
   const handleDownloadBackup = async (backupId: string, filename: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = useAuthStore.getState().token;
       const res = await fetch(`/api/backups/${serverId}/${backupId}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
         const blob = await res.blob();
