@@ -258,7 +258,7 @@ export function importBackup(
     xhr.addEventListener('error', () => reject(new Error('Import failed')))
     xhr.addEventListener('abort', () => reject(new Error('Import cancelled')))
 
-    xhr.open('POST', `/api/servers/${serverId}/import`)
+    xhr.open('POST', `/api/backups/${serverId}/import`)
     const token = useAuthStore.getState().token
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
