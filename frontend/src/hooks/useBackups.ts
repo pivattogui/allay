@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchBackups, createBackup, restoreBackup, deleteBackup } from '../lib/api'
+import { fetchBackups, createBackup, restoreBackup, deleteBackup, updateBackupConfig } from '../lib/api'
 import { serverKeys } from '../lib/queryKeys'
 
 export function useBackups(serverId: string) {
@@ -37,6 +37,18 @@ export function useDeleteBackup(serverId: string) {
 
   return useMutation({
     mutationFn: (backupId: string) => deleteBackup(serverId, backupId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: serverKeys.backups(serverId) })
+    },
+  })
+}
+
+export function useUpdateBackupConfig(serverId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (config: { enabled?: boolean; intervalMinutes?: number; maxBackups?: number; includeLogs?: boolean }) =>
+      updateBackupConfig(serverId, config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: serverKeys.backups(serverId) })
     },

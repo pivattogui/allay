@@ -206,6 +206,26 @@ export async function deleteBackup(serverId: string, backupId: string): Promise<
   if (!res.ok) throw new Error('Failed to delete backup')
 }
 
+export async function updateBackupConfig(
+  serverId: string,
+  config: Partial<BackupConfig>
+): Promise<BackupConfig> {
+  const res = await fetch(`/api/backups/${serverId}/config`, {
+    method: 'PATCH',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(config),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || 'Failed to update backup config')
+  }
+  const data = await res.json()
+  return data.config
+}
+
 // Properties
 export async function fetchProperties(serverId: string): Promise<Record<string, string>> {
   const res = await fetch(`/api/servers/${serverId}/properties`, {
