@@ -331,6 +331,23 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
         }
       }
 
+      // Cleanup macOS artifacts
+      const macosDir = path.join(serverDir, '__MACOSX');
+      if (fs.existsSync(macosDir)) {
+        fs.rmSync(macosDir, { recursive: true, force: true });
+      }
+
+      // Rename JAR to server.jar if needed
+      if (!fs.existsSync(path.join(serverDir, 'server.jar'))) {
+        const files = fs.readdirSync(serverDir);
+        const jarFile = files.find(f => f.endsWith('.jar'));
+        if (jarFile) {
+          fs.renameSync(path.join(serverDir, jarFile), path.join(serverDir, 'server.jar'));
+          console.info(`[Import] Renamed ${jarFile} to server.jar`);
+        }
+      }
+
+      // Ensure eula.txt
       const eulaPath = path.join(serverDir, 'eula.txt');
       fs.writeFileSync(eulaPath, 'eula=true\n');
 
