@@ -226,6 +226,47 @@ export async function updateBackupConfig(
   return data.config
 }
 
+export function importBackup(
+  serverId: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ message: string; backupId: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const formData = new FormData()
+    formData.append('file', file)
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+    })
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText))
+      } else {
+        try {
+          const error = JSON.parse(xhr.responseText)
+          reject(new Error(error.error || 'Import failed'))
+        } catch {
+          reject(new Error('Import failed'))
+        }
+      }
+    })
+
+    xhr.addEventListener('error', () => reject(new Error('Import failed')))
+    xhr.addEventListener('abort', () => reject(new Error('Import cancelled')))
+
+    xhr.open('POST', `/api/servers/${serverId}/import`)
+    const token = useAuthStore.getState().token
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    }
+    xhr.send(formData)
+  })
+}
+
 // Properties
 export async function fetchProperties(serverId: string): Promise<Record<string, string>> {
   const res = await fetch(`/api/servers/${serverId}/properties`, {
