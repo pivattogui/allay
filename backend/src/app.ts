@@ -94,6 +94,8 @@ export function buildApp() {
 }
 
 export async function initializeServices() {
+  const restartAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
+
   await backupManager.initializeSchedules();
   await restartScheduler.initialize();
 
@@ -125,6 +127,40 @@ export async function initializeServices() {
       }
     } else {
       console.info(`[RestartScheduler] Server ${serverId} not running, skipping restart`);
+    }
+  });
+
+  processManager.on('exit', async (serverId: string, code: number | null, _signal: string | null, wasRunning: boolean) => {
+    if (!wasRunning) return;
+    if (code === 0) return;
+
+    const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);
+    if (!server || !server.autoRestart) return;
+
+    const now = Date.now();
+    const windowMs = config.minecraft.restartWindowMs;
+    let attempts = restartAttempts.get(serverId);
+
+    if (!attempts || (now - attempts.firstAttemptAt) > windowMs) {
+      attempts = { count: 0, firstAttemptAt: now };
+    }
+
+    attempts.count++;
+    restartAttempts.set(serverId, attempts);
+
+    if (attempts.count > server.restartLimit) {
+      console.warn(`[AutoRestart] Server ${server.name} exceeded restart limit (${server.restartLimit}) within ${windowMs / 1000}s window`);
+      return;
+    }
+
+    console.info(`[AutoRestart] Server ${server.name} crashed, restarting (attempt ${attempts.count}/${server.restartLimit})`);
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await processManager.start(server as any);
+      console.info(`[AutoRestart] Server ${server.name} restarted successfully`);
+    } catch (err) {
+      console.error(`[AutoRestart] Failed to restart server ${server.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 }
