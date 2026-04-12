@@ -49,16 +49,8 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
     setPollInterval(hasPending ? 3000 : undefined);
   }, [hasPending]);
 
-  const handleCreateBackup = async () => {
-    const toastId = toast.loading('Creating backup... This may take a few minutes for large servers.', { duration: Infinity });
-    try {
-      await createBackupMutation.mutateAsync('manual');
-      toast.success('Backup created successfully', { id: toastId });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create backup';
-      if (message.includes('abort') || message.includes('cancel')) return;
-      toast.error(message, { id: toastId });
-    }
+  const handleCreateBackup = () => {
+    createBackupMutation.mutate('manual');
   };
 
   const handleRestoreBackup = async (backupId: string, filename: string) => {
