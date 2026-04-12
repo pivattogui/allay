@@ -43,12 +43,14 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
   const backups = data?.backups || [];
 
   const handleCreateBackup = async () => {
-    const toastId = toast.loading('Creating backup...');
+    const toastId = toast.loading('Creating backup... This may take a few minutes for large servers.', { duration: Infinity });
     try {
       await createBackupMutation.mutateAsync('manual');
       toast.success('Backup created successfully', { id: toastId });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create backup', { id: toastId });
+      const message = error instanceof Error ? error.message : 'Failed to create backup';
+      if (message.includes('abort') || message.includes('cancel')) return;
+      toast.error(message, { id: toastId });
     }
   };
 
