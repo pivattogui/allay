@@ -1,4 +1,5 @@
 import cron, { ScheduledTask } from 'node-cron';
+import { CronExpressionParser } from 'cron-parser';
 import { EventEmitter } from 'node:events';
 import { isNotNull, and, ne } from 'drizzle-orm';
 import { db } from '../../db/index.js';
@@ -70,15 +71,11 @@ class RestartSchedulerService extends EventEmitter {
     if (!info) return null;
 
     try {
-      const interval = cron.validate(info.cronExpression);
-      if (interval) {
-        return null;
-      }
+      const interval = CronExpressionParser.parse(info.cronExpression);
+      return interval.next().toDate();
     } catch {
       return null;
     }
-
-    return null;
   }
 
   hasSchedule(serverId: string): boolean {
