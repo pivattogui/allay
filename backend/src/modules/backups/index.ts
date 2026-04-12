@@ -1,5 +1,3 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as cron from 'node-cron';
@@ -9,8 +7,6 @@ import { servers, backupConfigs, backups, events } from '../../db/schema.js';
 import { config } from '../../config.js';
 import { processManager } from '../process/index.js';
 import { metricsCollector } from '../metrics/index.js';
-
-const execAsync = promisify(exec);
 
 export interface BackupConfig {
   id: string;
@@ -123,11 +119,22 @@ class BackupManager {
         excludePatterns.push('--exclude=logs');
       }
 
-      const excludeArgs = excludePatterns.join(' ');
-      await execAsync(
-        `tar ${excludeArgs} -czf "${backupPath}" -C "${path.dirname(serverDir)}" "${path.basename(serverDir)}"`,
-        { maxBuffer: 50 * 1024 * 1024 }
-      );
+      const tarArgs = [
+        ...excludePatterns,
+        '-czf', backupPath,
+        '-C', path.dirname(serverDir),
+        path.basename(serverDir),
+      ];
+      const tarProc = Bun.spawn(['tar', ...tarArgs], {
+        stdout: 'ignore',
+        stderr: 'pipe',
+      });
+      const tarExitCode = await tarProc.exited;
+      // exit code 1 = "file changed as we read it" (warning, not error)
+      if (tarExitCode > 1) {
+        const stderr = await new Response(tarProc.stderr).text();
+        throw new Error(`tar failed (exit ${tarExitCode}): ${stderr.slice(0, 200)}`);
+      }
 
       const stats = fs.statSync(backupPath);
 
@@ -209,10 +216,15 @@ class BackupManager {
     }
 
     try {
-      await execAsync(
-        `tar -xzf "${backupPath}" -C "${parentDir}"`,
-        { maxBuffer: 50 * 1024 * 1024 }
-      );
+      const restoreProc = Bun.spawn(['tar', '-xzf', backupPath, '-C', parentDir], {
+        stdout: 'ignore',
+        stderr: 'pipe',
+      });
+      const restoreExitCode = await restoreProc.exited;
+      if (restoreExitCode !== 0) {
+        const stderr = await new Response(restoreProc.stderr).text();
+        throw new Error(`tar extract failed (exit ${restoreExitCode}): ${stderr.slice(0, 200)}`);
+      }
 
       const jarPath = path.join(parentDir, preRestoreBackup, 'server.jar');
       if (fs.existsSync(jarPath)) {
