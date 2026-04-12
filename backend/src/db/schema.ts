@@ -42,8 +42,9 @@ export const backups = pgTable('backups', () => ({
   id: uuid('id').primaryKey().defaultRandom(),
   serverId: uuid('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
   filename: text('filename').notNull(),
-  sizeBytes: integer('size_bytes').notNull(),
+  sizeBytes: integer('size_bytes').notNull().default(0),
   type: text('type', { enum: ['manual', 'scheduled'] }).notNull(),
+  status: text('status', { enum: ['pending', 'completed', 'failed'] }).notNull().default('completed'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }), (table) => [
   index('idx_backups_server_id').on(table.serverId),

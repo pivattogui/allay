@@ -23,6 +23,7 @@ export interface BackupRecord {
   filename: string;
   sizeBytes: number;
   type: 'manual' | 'scheduled';
+  status: 'pending' | 'completed' | 'failed';
   createdAt: string;
 }
 
@@ -106,11 +107,22 @@ class BackupManager {
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
-    try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `${serverId}_${timestamp}.tar.gz`;
-      const backupPath = path.join(config.paths.backups, filename);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `${serverId}_${timestamp}.tar.gz`;
+    const backupPath = path.join(config.paths.backups, filename);
 
+    // Insert pending record before compression starts
+    const [result] = await db.insert(backups).values({
+      serverId,
+      filename,
+      sizeBytes: 0,
+      type,
+      status: 'pending',
+    }).returning({ id: backups.id });
+
+    const backupId = result.id;
+
+    try {
       const [backupConfig] = await db.select().from(backupConfigs).where(eq(backupConfigs.serverId, serverId)).limit(1);
       const includeLogs = backupConfig?.includeLogs ?? false;
 
@@ -130,7 +142,6 @@ class BackupManager {
         stderr: 'pipe',
       });
       const tarExitCode = await tarProc.exited;
-      // exit code 1 = "file changed as we read it" (warning, not error)
       if (tarExitCode > 1) {
         const stderr = await new Response(tarProc.stderr).text();
         throw new Error(`tar failed (exit ${tarExitCode}): ${stderr.slice(0, 200)}`);
@@ -138,12 +149,9 @@ class BackupManager {
 
       const stats = fs.statSync(backupPath);
 
-      const [result] = await db.insert(backups).values({
-        serverId,
-        filename,
-        sizeBytes: stats.size,
-        type,
-      }).returning({ id: backups.id });
+      await db.update(backups)
+        .set({ sizeBytes: stats.size, status: 'completed' })
+        .where(eq(backups.id, backupId));
 
       await db.insert(events).values({
         serverId,
@@ -154,13 +162,19 @@ class BackupManager {
       await this.applyRetentionPolicy(serverId);
 
       return {
-        id: result.id,
+        id: backupId,
         serverId,
         filename,
         sizeBytes: stats.size,
         type,
+        status: 'completed' as const,
         createdAt: new Date().toISOString(),
       };
+    } catch (err) {
+      await db.update(backups)
+        .set({ status: 'failed' })
+        .where(eq(backups.id, backupId));
+      throw err;
     } finally {
       if (isRunning) {
         processManager.sendCommand(serverId, 'save-on');
@@ -181,6 +195,7 @@ class BackupManager {
       filename: row.filename,
       sizeBytes: row.sizeBytes,
       type: row.type,
+      status: (row as any).status || 'completed',
       createdAt: row.createdAt.toISOString(),
     }));
   }

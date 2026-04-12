@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchBackups, createBackup, restoreBackup, deleteBackup, updateBackupConfig } from '../lib/api'
 import { serverKeys } from '../lib/queryKeys'
 
-export function useBackups(serverId: string) {
+export function useBackups(serverId: string, refetchInterval?: number) {
   return useQuery({
     queryKey: serverKeys.backups(serverId),
     queryFn: () => fetchBackups(serverId),
     enabled: !!serverId,
+    refetchInterval: refetchInterval,
   })
 }
 

@@ -34,5 +34,6 @@ export interface Backup {
   filename: string;
   sizeBytes: number;
   type: 'manual' | 'scheduled';
+  status: 'pending' | 'completed' | 'failed';
   createdAt: string;
 }

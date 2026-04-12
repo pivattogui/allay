@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
 import { Archive, Plus, MoreVertical, RotateCcw, Trash2, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBackups, useCreateBackup, useRestoreBackup, useDeleteBackup } from '@/hooks/useBackups';
@@ -33,7 +34,8 @@ function formatDate(dateString: string): string {
 }
 
 export function BackupList({ serverId, serverName: _serverName }: BackupListProps) {
-  const { data, isLoading } = useBackups(serverId);
+  const [pollInterval, setPollInterval] = useState<number | undefined>(undefined);
+  const { data, isLoading } = useBackups(serverId, pollInterval);
   const createBackupMutation = useCreateBackup(serverId);
   const restoreBackupMutation = useRestoreBackup(serverId);
   const deleteBackupMutation = useDeleteBackup(serverId);
@@ -41,6 +43,11 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const backups = data?.backups || [];
+  const hasPending = backups.some(b => b.status === 'pending');
+
+  useEffect(() => {
+    setPollInterval(hasPending ? 3000 : undefined);
+  }, [hasPending]);
 
   const handleCreateBackup = async () => {
     const toastId = toast.loading('Creating backup... This may take a few minutes for large servers.', { duration: Infinity });
@@ -166,24 +173,36 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
       ) : (
         <div className="space-y-3">
           {backups.map((backup) => (
-            <Card key={backup.id}>
+            <Card key={backup.id} className={backup.status === 'pending' ? 'opacity-70' : undefined}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                      <Archive className="h-5 w-5 text-muted-foreground" />
+                      {backup.status === 'pending' ? (
+                        <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+                      ) : (
+                        <Archive className="h-5 w-5 text-muted-foreground" />
+                      )}
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">{backup.filename}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground">{backup.filename}</p>
+                        {backup.status === 'pending' && (
+                          <Badge variant="outline" className="text-xs">Creating...</Badge>
+                        )}
+                        {backup.status === 'failed' && (
+                          <Badge variant="destructive" className="text-xs">Failed</Badge>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>{formatBytes(backup.sizeBytes)}</span>
-                        <span>·</span>
+                        {backup.status === 'completed' && <span>{formatBytes(backup.sizeBytes)}</span>}
+                        {backup.status === 'completed' && <span>·</span>}
                         <span>{formatDate(backup.createdAt)}</span>
                       </div>
                     </div>
                   </div>
 
-                  <DropdownMenu>
+                  {backup.status === 'completed' && <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
@@ -215,7 +234,7 @@ export function BackupList({ serverId, serverName: _serverName }: BackupListProp
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
-                  </DropdownMenu>
+                  </DropdownMenu>}
                 </div>
               </CardContent>
             </Card>
