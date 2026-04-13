@@ -34,6 +34,7 @@ services:
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-3000}:3000"
+      - "${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}:${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}"
     environment:
       NODE_ENV: development
       PORT: 3000
@@ -41,6 +42,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-development-secret-change-in-production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       DATA_DIR: /app/data
+      MC_PORT_MIN: ${MC_PORT_MIN:-25565}
+      MC_PORT_MAX: ${MC_PORT_MAX:-25575}
     volumes:
       - ./backend:/app
       - /app/node_modules

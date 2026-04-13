@@ -8,6 +8,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().default('postgresql://allay:allay@localhost:5432/allay'),
   JWT_SECRET: z.string().min(16).default('development-secret-change-in-production'),
   JWT_EXPIRES_IN: z.string().default('24h'),
+  MC_PORT_MIN: z.coerce.number().int().min(1024).max(65535).default(25565),
+  MC_PORT_MAX: z.coerce.number().int().min(1024).max(65535).default(25575),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -42,7 +44,9 @@ export const config = {
   minecraft: {
     defaultRamMin: 1024,
     defaultRamMax: 2048,
-    defaultPort: 25565,
+    defaultPort: env.MC_PORT_MIN,
+    portMin: env.MC_PORT_MIN,
+    portMax: env.MC_PORT_MAX,
     shutdownTimeout: 30000,
     startupTimeout: 120000,
     maxRestarts: 3,

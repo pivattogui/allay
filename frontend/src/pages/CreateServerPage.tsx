@@ -32,6 +32,9 @@ export function CreateServerPage() {
   const [ramMin, setRamMin] = useState('1024')
   const [ramMax, setRamMax] = useState('2048')
 
+  // Port range from system config
+  const [portRange, setPortRange] = useState({ min: 25565, max: 25575 })
+
   // Server types fetched from API
   const [serverTypes, setServerTypes] = useState<ServerType[]>([])
   const [loadingTypes, setLoadingTypes] = useState(true)
@@ -41,6 +44,28 @@ export function CreateServerPage() {
   const [loadingVersions, setLoadingVersions] = useState(false)
 
   const loading = createServerMutation.isPending
+
+  // Fetch port range on mount
+  useEffect(() => {
+    const loadPortRange = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch('/api/system/info', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.portRange) {
+            setPortRange(data.portRange)
+            setPort(String(data.portRange.min))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch port range:', err)
+      }
+    }
+    loadPortRange()
+  }, [])
 
   // Fetch server types on mount
   useEffect(() => {
@@ -111,8 +136,8 @@ export function CreateServerPage() {
     }
 
     const portNum = parseInt(port, 10)
-    if (isNaN(portNum) || portNum < 1024 || portNum > 65535) {
-      toast.error('Port must be between 1024 and 65535')
+    if (isNaN(portNum) || portNum < portRange.min || portNum > portRange.max) {
+      toast.error(`Port must be between ${portRange.min} and ${portRange.max}`)
       return
     }
 
@@ -242,13 +267,13 @@ export function CreateServerPage() {
                   type="number"
                   value={port}
                   onChange={(e) => setPort(e.target.value)}
-                  placeholder="25565"
-                  min={1024}
-                  max={65535}
+                  placeholder={String(portRange.min)}
+                  min={portRange.min}
+                  max={portRange.max}
                   required
                   disabled={loading}
                 />
-                <p className="text-xs text-muted-foreground">Default Minecraft port is 25565</p>
+                <p className="text-xs text-muted-foreground">Allowed range: {portRange.min}–{portRange.max}</p>
               </div>
 
               <Separator />

@@ -22,6 +22,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       DATA_DIR: /app/data
+      MC_PORT_MIN: ${MC_PORT_MIN:-25565}
+      MC_PORT_MAX: ${MC_PORT_MAX:-25575}
     volumes:
       - backend-data:/app/data
     healthcheck:

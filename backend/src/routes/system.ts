@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { jarManager } from '../modules/servers/jar-manager.js';
+import { config } from '../config.js';
 import type { JavaVersion } from '../types/index.js';
 import {
   SystemInfoResponse,
@@ -156,6 +157,10 @@ export const systemRoutes = new Elysia({ prefix: '/api/system', detail: { tags: 
       platform: os.platform(),
       arch: os.arch(),
       uptime: os.uptime(),
+      portRange: {
+        min: config.minecraft.portMin,
+        max: config.minecraft.portMax,
+      },
     };
   }, {
     response: {

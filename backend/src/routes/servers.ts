@@ -119,6 +119,11 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
 
     const input = result.data;
 
+    if (input.port < config.minecraft.portMin || input.port > config.minecraft.portMax) {
+      set.status = 400;
+      return { error: `Port must be between ${config.minecraft.portMin} and ${config.minecraft.portMax}`, code: 'PORT_OUT_OF_RANGE' };
+    }
+
     const [existingPort] = await db.select({ id: servers.id }).from(servers).where(eq(servers.port, input.port)).limit(1);
     if (existingPort) {
       set.status = 400;
@@ -213,6 +218,11 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
     const input = result.data;
 
     if (input.port && input.port !== server.port) {
+      if (input.port < config.minecraft.portMin || input.port > config.minecraft.portMax) {
+        set.status = 400;
+        return { error: `Port must be between ${config.minecraft.portMin} and ${config.minecraft.portMax}`, code: 'PORT_OUT_OF_RANGE' };
+      }
+
       const [existingPort] = await db.select({ id: servers.id }).from(servers).where(and(eq(servers.port, input.port), ne(servers.id, id))).limit(1);
       if (existingPort) {
         set.status = 400;
