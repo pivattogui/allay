@@ -1,29 +1,24 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   Play,
   Square,
-  Terminal,
-  Archive,
-  Settings,
   MoreVertical,
   Trash2,
-  ExternalLink,
   Loader2,
 } from 'lucide-react';
 import type { Server } from '@/types/server';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 
 interface ServerCardProps {
   server: Server;
@@ -38,21 +33,6 @@ function formatUptime(seconds: number): string {
     return `${hours}h ${minutes}m`;
   }
   return `${minutes}m`;
-}
-
-function getStatusBadge(state: string) {
-  switch (state) {
-    case 'running':
-      return <Badge variant="success">Running</Badge>;
-    case 'starting':
-      return <Badge variant="warning">Starting</Badge>;
-    case 'stopping':
-      return <Badge variant="warning">Stopping</Badge>;
-    case 'crashed':
-      return <Badge variant="destructive">Crashed</Badge>;
-    default:
-      return <Badge variant="secondary">Stopped</Badge>;
-  }
 }
 
 export function ServerCard({ server, pendingAction, onAction }: ServerCardProps) {
@@ -94,20 +74,8 @@ export function ServerCard({ server, pendingAction, onAction }: ServerCardProps)
       <CardContent className="p-4">
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <span
-                className={cn(
-                  'h-2.5 w-2.5 rounded-full flex-shrink-0',
-                  server.status.state === 'running' && 'bg-green-500 status-pulse',
-                  server.status.state === 'starting' && 'bg-yellow-500',
-                  server.status.state === 'stopping' && 'bg-yellow-500',
-                  server.status.state === 'crashed' && 'bg-red-500',
-                  server.status.state === 'stopped' && 'bg-muted-foreground'
-                )}
-              />
-              <h3 className="font-medium text-foreground truncate">{server.name}</h3>
-            </div>
-            {getStatusBadge(server.status.state)}
+            <h3 className="font-medium text-foreground truncate">{server.name}</h3>
+            <StatusBadge state={server.status.state} />
           </div>
 
           {/* Info */}
@@ -175,18 +143,6 @@ export function ServerCard({ server, pendingAction, onAction }: ServerCardProps)
               </Button>
             )}
 
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => e.stopPropagation()}
-              disabled={isLoading}
-              asChild
-            >
-              <Link to={`/servers/${server.id}?tab=console`}>
-                <Terminal className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <Button variant="secondary" size="sm" disabled={isLoading}>
@@ -194,25 +150,6 @@ export function ServerCard({ server, pendingAction, onAction }: ServerCardProps)
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link to={`/servers/${server.id}`}>
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Open
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to={`/servers/${server.id}?tab=backups`}>
-                    <Archive className="mr-2 h-4 w-4" />
-                    Backups
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to={`/servers/${server.id}?tab=settings`}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={(e) => {

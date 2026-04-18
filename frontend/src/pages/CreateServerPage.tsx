@@ -327,40 +327,6 @@ export function CreateServerPage() {
             </Button>
           </div>
 
-          {/* Loading overlay */}
-          {loading && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="py-5">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Creating your server...</p>
-                      <p className="text-xs text-muted-foreground">
-                        This may take a minute depending on your connection
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-2 pl-[52px]">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                      Setting up server directory
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                      Downloading server JAR file
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                      Configuring server properties
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </form>
       </div>
     </div>

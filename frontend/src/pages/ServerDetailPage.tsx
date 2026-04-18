@@ -1,7 +1,6 @@
-import { useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -15,6 +14,8 @@ import { ConsoleView } from '@/components/console/ConsoleView'
 import { BackupList } from '@/components/backups/BackupList'
 import { FileBrowser } from '@/components/files'
 import { ServerSettingsTab } from '@/components/settings/ServerSettingsTab'
+import { StatusBadge } from '@/components/shared/StatusBadge'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import {
   ArrowLeft,
   Play,
@@ -26,29 +27,14 @@ import {
   FolderOpen,
   Settings,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { useServers } from '@/hooks/useServers'
 import { useStartServer, useStopServer, useDeleteServer } from '@/hooks/useServerActions'
-
-function getStatusBadge(state: string) {
-  switch (state) {
-    case 'running':
-      return <Badge variant="success">Running</Badge>
-    case 'starting':
-      return <Badge variant="warning">Starting</Badge>
-    case 'stopping':
-      return <Badge variant="warning">Stopping</Badge>
-    case 'crashed':
-      return <Badge variant="destructive">Crashed</Badge>
-    default:
-      return <Badge variant="secondary">Stopped</Badge>
-  }
-}
 
 export function ServerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   const tab = searchParams.get('tab') || 'console'
   const { data: servers = [] } = useServers()
@@ -102,13 +88,8 @@ export function ServerDetailPage() {
   const isRunning = server.status.state === 'running'
   const isBusy = server.status.state === 'starting' || server.status.state === 'stopping'
 
-  const handleDelete = () => {
-    if (confirm('Are you sure you want to delete this server? All data will be lost.')) {
-      handleServerAction('delete')
-    }
-  }
-
   return (
+    <>
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-border bg-background">
@@ -126,18 +107,8 @@ export function ServerDetailPage() {
               </Button>
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    'h-2.5 w-2.5 rounded-full',
-                    server.status.state === 'running' && 'bg-green-500 status-pulse',
-                    server.status.state === 'starting' && 'bg-yellow-500',
-                    server.status.state === 'stopping' && 'bg-yellow-500',
-                    server.status.state === 'crashed' && 'bg-red-500',
-                    server.status.state === 'stopped' && 'bg-muted-foreground'
-                  )}
-                />
                 <h1 className="text-lg font-semibold text-foreground">{server.name}</h1>
-                {getStatusBadge(server.status.state)}
+                <StatusBadge state={server.status.state} />
               </div>
             </div>
 
@@ -181,7 +152,7 @@ export function ServerDetailPage() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
-                    onClick={handleDelete}
+                    onClick={() => setDeleteDialogOpen(true)}
                     disabled={isRunning || isBusy}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -246,5 +217,17 @@ export function ServerDetailPage() {
         </Tabs>
       </div>
     </div>
+
+    <ConfirmDialog
+      open={deleteDialogOpen}
+      onOpenChange={setDeleteDialogOpen}
+      title="Delete Server"
+      description={`Are you sure you want to delete "${server.name}"? All server data, worlds, and configurations will be permanently lost.`}
+      confirmLabel="Delete"
+      cancelLabel="Cancel"
+      variant="destructive"
+      onConfirm={() => handleServerAction('delete')}
+    />
+    </>
   )
 }

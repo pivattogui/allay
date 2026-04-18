@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,11 @@ export function BackupList({ serverId }: BackupListProps) {
   const deleteBackupMutation = useDeleteBackup(serverId);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'restore' | 'delete';
+    backupId: string;
+    filename: string;
+  } | null>(null);
 
   const backups = data?.backups || [];
   const hasPending = backups.some(b => b.status === 'pending');
@@ -53,11 +59,7 @@ export function BackupList({ serverId }: BackupListProps) {
     createBackupMutation.mutate('manual');
   };
 
-  const handleRestoreBackup = async (backupId: string, filename: string) => {
-    if (!confirm(`Are you sure you want to restore backup "${filename}"? This will overwrite current server data.`)) {
-      return;
-    }
-
+  const executeRestore = async (backupId: string) => {
     setActionLoading(backupId);
     try {
       await restoreBackupMutation.mutateAsync(backupId);
@@ -69,11 +71,7 @@ export function BackupList({ serverId }: BackupListProps) {
     }
   };
 
-  const handleDeleteBackup = async (backupId: string, filename: string) => {
-    if (!confirm(`Are you sure you want to delete backup "${filename}"?`)) {
-      return;
-    }
-
+  const executeDelete = async (backupId: string) => {
     setActionLoading(backupId);
     try {
       await deleteBackupMutation.mutateAsync(backupId);
@@ -83,6 +81,16 @@ export function BackupList({ serverId }: BackupListProps) {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleConfirm = () => {
+    if (!confirmAction) return;
+    if (confirmAction.type === 'restore') {
+      executeRestore(confirmAction.backupId);
+    } else {
+      executeDelete(confirmAction.backupId);
+    }
+    setConfirmAction(null);
   };
 
   const handleDownloadBackup = async (backupId: string, filename: string) => {
@@ -127,112 +135,128 @@ export function BackupList({ serverId }: BackupListProps) {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-medium text-foreground">Backups</h2>
-          <p className="text-sm text-muted-foreground">
-            {backups.length} backup{backups.length !== 1 ? 's' : ''} available
-          </p>
+    <>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-foreground">Backups</h2>
+            <p className="text-sm text-muted-foreground">
+              {backups.length} backup{backups.length !== 1 ? 's' : ''} available
+            </p>
+          </div>
+          <Button onClick={handleCreateBackup} disabled={createBackupMutation.isPending}>
+            {createBackupMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Backup
+              </>
+            )}
+          </Button>
         </div>
-        <Button onClick={handleCreateBackup} disabled={createBackupMutation.isPending}>
-          {createBackupMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Backup
-            </>
-          )}
-        </Button>
+
+        {/* Backup List */}
+        {backups.length === 0 ? (
+          <EmptyState
+            icon={Archive}
+            title="No backups yet"
+            description="Create your first backup to protect your server data"
+            action={{
+              label: 'Create Backup',
+              onClick: handleCreateBackup,
+            }}
+          />
+        ) : (
+          <div className="space-y-3">
+            {backups.map((backup) => (
+              <Card key={backup.id} className={backup.status === 'pending' ? 'opacity-70' : undefined}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                        {backup.status === 'pending' ? (
+                          <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+                        ) : (
+                          <Archive className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-foreground">{backup.filename}</p>
+                          {backup.status === 'pending' && (
+                            <Badge variant="outline" className="text-xs">Creating...</Badge>
+                          )}
+                          {backup.status === 'failed' && (
+                            <Badge variant="destructive" className="text-xs">Failed</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          {backup.status === 'completed' && <span>{formatBytes(backup.sizeBytes)}</span>}
+                          {backup.status === 'completed' && <span>·</span>}
+                          <span>{formatDate(backup.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {backup.status === 'completed' && <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={actionLoading === backup.id}
+                        >
+                          {actionLoading === backup.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <MoreVertical className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.filename)}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setConfirmAction({ type: 'restore', backupId: backup.id, filename: backup.filename })}>
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          Restore
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setConfirmAction({ type: 'delete', backupId: backup.id, filename: backup.filename })}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Backup List */}
-      {backups.length === 0 ? (
-        <EmptyState
-          icon={Archive}
-          title="No backups yet"
-          description="Create your first backup to protect your server data"
-          action={{
-            label: 'Create Backup',
-            onClick: handleCreateBackup,
-          }}
-        />
-      ) : (
-        <div className="space-y-3">
-          {backups.map((backup) => (
-            <Card key={backup.id} className={backup.status === 'pending' ? 'opacity-70' : undefined}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                      {backup.status === 'pending' ? (
-                        <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
-                      ) : (
-                        <Archive className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-foreground">{backup.filename}</p>
-                        {backup.status === 'pending' && (
-                          <Badge variant="outline" className="text-xs">Creating...</Badge>
-                        )}
-                        {backup.status === 'failed' && (
-                          <Badge variant="destructive" className="text-xs">Failed</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        {backup.status === 'completed' && <span>{formatBytes(backup.sizeBytes)}</span>}
-                        {backup.status === 'completed' && <span>·</span>}
-                        <span>{formatDate(backup.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {backup.status === 'completed' && <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={actionLoading === backup.id}
-                      >
-                        {actionLoading === backup.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <MoreVertical className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.filename)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleRestoreBackup(backup.id, backup.filename)}>
-                        <RotateCcw className="mr-2 h-4 w-4" />
-                        Restore
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => handleDeleteBackup(backup.id, backup.filename)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+      <ConfirmDialog
+        open={!!confirmAction}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+        title={confirmAction?.type === 'restore' ? 'Restore Backup' : 'Delete Backup'}
+        description={
+          confirmAction?.type === 'restore'
+            ? `Are you sure you want to restore "${confirmAction.filename}"? This will overwrite current server data.`
+            : `Are you sure you want to delete "${confirmAction?.filename}"? This cannot be undone.`
+        }
+        confirmLabel={confirmAction?.type === 'restore' ? 'Restore' : 'Delete'}
+        variant={confirmAction?.type === 'delete' ? 'destructive' : 'default'}
+        onConfirm={handleConfirm}
+      />
+    </>
   );
 }

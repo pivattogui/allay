@@ -35,17 +35,17 @@ function MetricCard({ icon, label, value, subValue, percentage, color, data, raw
   };
 
   return (
-    <div className="rounded-xl bg-zinc-900/50 p-4 ring-1 ring-white/5">
+    <div className="rounded-xl bg-card/50 p-4 ring-1 ring-border">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-zinc-400">
+        <div className="flex items-center gap-2 text-muted-foreground">
           {icon}
           <span className="text-sm font-medium">{label}</span>
         </div>
         <div className="text-right">
-          <span className="text-lg font-semibold text-white">{value}</span>
+          <span className="text-lg font-semibold text-foreground">{value}</span>
           {subValue && (
-            <span className="text-sm text-zinc-500 ml-1">{subValue}</span>
+            <span className="text-sm text-muted-foreground/70 ml-1">{subValue}</span>
           )}
         </div>
       </div>
@@ -56,7 +56,7 @@ function MetricCard({ icon, label, value, subValue, percentage, color, data, raw
       </div>
 
       {/* Progress bar */}
-      <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+      <div className="h-1 bg-muted rounded-full overflow-hidden">
         <div
           className={`h-full ${colorClasses[color]} rounded-full transition-all duration-500`}
           style={{ width: `${Math.min(100, percentage)}%` }}
@@ -97,11 +97,11 @@ export function MetricsChart({ history, maxPoints = 30, isRunning = true }: Metr
     return (
       <div className="rounded-xl bg-zinc-900/50 p-6 ring-1 ring-white/5">
         <div className="flex flex-col items-center justify-center py-4 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 mb-3">
-            <Power className="h-6 w-6 text-zinc-500" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+            <Power className="h-6 w-6 text-muted-foreground/70" />
           </div>
-          <h3 className="text-sm font-medium text-zinc-300 mb-1">Server Offline</h3>
-          <p className="text-xs text-zinc-500 max-w-xs">
+          <h3 className="text-sm font-medium text-foreground/80 mb-1">Server Offline</h3>
+          <p className="text-xs text-muted-foreground/70 max-w-xs">
             Start the server to view real-time metrics including CPU, memory usage, and player count.
           </p>
         </div>
@@ -116,14 +116,14 @@ export function MetricsChart({ history, maxPoints = 30, isRunning = true }: Metr
         {['CPU', 'Memory', 'Players'].map((label) => (
           <div
             key={label}
-            className="rounded-xl bg-zinc-900/50 p-4 ring-1 ring-white/5 animate-pulse"
+            className="rounded-xl bg-card/50 p-4 ring-1 ring-border animate-pulse"
           >
             <div className="flex justify-between mb-4">
-              <div className="h-4 bg-zinc-800 rounded w-16" />
-              <div className="h-4 bg-zinc-800 rounded w-12" />
+              <div className="h-4 bg-muted rounded w-16" />
+              <div className="h-4 bg-muted rounded w-12" />
             </div>
-            <div className="h-10 bg-zinc-800/50 rounded mb-3" />
-            <div className="h-1 bg-zinc-800 rounded-full" />
+            <div className="h-10 bg-muted/50 rounded mb-3" />
+            <div className="h-1 bg-muted rounded-full" />
           </div>
         ))}
       </div>

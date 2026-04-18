@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { FileTree } from './FileTree';
 import { FileEditor } from './FileEditor';
 import { FileBreadcrumb } from './FileBreadcrumb';
@@ -48,6 +49,8 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
+  const [discardCallback, setDiscardCallback] = useState<(() => void) | null>(null);
 
   // Import state
   const queryClient = useQueryClient();
@@ -119,36 +122,24 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
     fetchEntries(currentPath);
   }, [serverId]);
 
-  const handleNavigate = (path: string) => {
+  const discardAndDo = (action: () => void) => {
     if (isModified) {
-      if (!confirm('You have unsaved changes. Discard them?')) {
-        return;
-      }
+      setDiscardCallback(() => action);
+      return;
     }
-    setSelectedFile(null);
-    setEditorContent(null);
-    setIsModified(false);
-    fetchEntries(path);
+    action();
   };
 
-  const handleSelect = async (entry: FileEntry) => {
-    if (entry.type === 'directory') {
-      const newPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
-      handleNavigate(newPath);
-      return;
-    }
+  const handleNavigate = (path: string) => {
+    discardAndDo(() => {
+      setSelectedFile(null);
+      setEditorContent(null);
+      setIsModified(false);
+      fetchEntries(path);
+    });
+  };
 
-    if (!entry.editable) {
-      toast.info('This file type cannot be edited. Use download instead.');
-      return;
-    }
-
-    if (isModified) {
-      if (!confirm('You have unsaved changes. Discard them?')) {
-        return;
-      }
-    }
-
+  const openFile = async (entry: FileEntry) => {
     const filePath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
     setSelectedFile({ path: filePath, entry });
     setEditorLoading(true);
@@ -187,6 +178,21 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
     }
   };
 
+  const handleSelect = (entry: FileEntry) => {
+    if (entry.type === 'directory') {
+      const newPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+      handleNavigate(newPath);
+      return;
+    }
+
+    if (!entry.editable) {
+      toast.info('This file type cannot be edited. Use download instead.');
+      return;
+    }
+
+    discardAndDo(() => openFile(entry));
+  };
+
   const handleSave = async () => {
     if (!selectedFile || editorContent === null) return;
 
@@ -219,23 +225,19 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
   };
 
   const handleCloseEditor = () => {
-    if (isModified) {
-      if (!confirm('You have unsaved changes. Discard them?')) {
-        return;
-      }
-    }
-    setSelectedFile(null);
-    setEditorContent(null);
-    setIsModified(false);
+    discardAndDo(() => {
+      setSelectedFile(null);
+      setEditorContent(null);
+      setIsModified(false);
+    });
   };
 
-  const handleDelete = async (entry: FileEntry) => {
-    const itemPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
-    const itemType = entry.type === 'directory' ? 'folder' : 'file';
+  const handleDeleteRequest = (entry: FileEntry) => {
+    setDeleteTarget(entry);
+  };
 
-    if (!confirm(`Delete ${itemType} "${entry.name}"? This cannot be undone.`)) {
-      return;
-    }
+  const executeDelete = async (entry: FileEntry) => {
+    const itemPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
 
     try {
       const token = localStorage.getItem('token');
@@ -425,7 +427,7 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
               currentPath={currentPath}
               selectedPath={selectedFile?.path || null}
               onSelect={handleSelect}
-              onDelete={handleDelete}
+              onDelete={handleDeleteRequest}
               onRename={handleRename}
               onDownload={handleDownload}
               newFolderName={newFolderName}
@@ -539,6 +541,36 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title={`Delete ${deleteTarget?.type === 'directory' ? 'Folder' : 'File'}`}
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteTarget) executeDelete(deleteTarget);
+          setDeleteTarget(null);
+        }}
+      />
+
+      {/* Unsaved Changes Confirmation */}
+      <ConfirmDialog
+        open={!!discardCallback}
+        onOpenChange={(open) => { if (!open) setDiscardCallback(null); }}
+        title="Unsaved Changes"
+        description="You have unsaved changes. Discard them?"
+        confirmLabel="Discard"
+        variant="destructive"
+        onConfirm={() => {
+          if (discardCallback) {
+            setIsModified(false);
+            discardCallback();
+          }
+          setDiscardCallback(null);
+        }}
+      />
     </div>
   );
 }

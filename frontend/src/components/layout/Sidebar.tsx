@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   Plus,
   LogOut,
-  Settings,
   ChevronRight,
 } from 'lucide-react';
 import { useServers } from '@/hooks/useServers';
@@ -107,16 +106,7 @@ export function Sidebar() {
       <Separator />
 
       {/* Footer */}
-      <div className="p-3 space-y-1">
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-muted-foreground"
-          size="sm"
-          disabled
-        >
-          <Settings className="mr-2 h-4 w-4" />
-          Settings
-        </Button>
+      <div className="p-3">
         <Button
           variant="ghost"
           className="w-full justify-start text-muted-foreground hover:text-destructive"
