@@ -3,6 +3,7 @@ export interface ServerStatus {
   uptime?: number
   players?: number
   maxPlayers?: number
+  lastError?: string
 }
 
 export interface Server {

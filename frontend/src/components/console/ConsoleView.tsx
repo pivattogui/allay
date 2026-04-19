@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp, Send, Wifi, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ServerStateBanner } from '@/components/console/ServerStateBanner'
 import { MetricsChart } from '@/components/MetricsChart'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -10,10 +11,12 @@ import { cn } from '@/lib/utils'
 interface ConsoleViewProps {
   serverId: string
   serverName: string
-  isRunning: boolean
+  serverState: string
+  lastError?: string
 }
 
-export function ConsoleView({ serverId, serverName: _serverName, isRunning }: ConsoleViewProps) {
+export function ConsoleView({ serverId, serverName: _serverName, serverState, lastError }: ConsoleViewProps) {
+  const isRunning = serverState === 'running'
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [metricsHistory, setMetricsHistory] = useState<ServerMetrics[]>([])
   const [command, setCommand] = useState('')
@@ -114,6 +117,9 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
         )}
       </div>
 
+      {/* Server State Banner */}
+      <ServerStateBanner serverState={serverState} lastError={lastError} logs={logs} />
+
       {/* Console Output */}
       <div className="flex-1 min-h-0 px-6 py-4">
         <div
@@ -121,7 +127,7 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
           onScroll={handleScroll}
           className="h-full overflow-y-auto bg-black rounded-lg p-4 console-text text-sm"
         >
-          {!isRunning ? (
+          {serverState === 'stopped' || serverState === 'stopping' ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">Server is not running</div>
           ) : logs.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">Waiting for logs...</div>

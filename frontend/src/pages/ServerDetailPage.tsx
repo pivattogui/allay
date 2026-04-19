@@ -181,7 +181,12 @@ export function ServerDetailPage() {
         <div className="flex-1 overflow-hidden">
           <Tabs value={tab} className="h-full">
             <TabsContent value="console" className="h-full m-0 p-0">
-              <ConsoleView serverId={server.id} serverName={server.name} isRunning={isRunning} />
+              <ConsoleView
+                serverId={server.id}
+                serverName={server.name}
+                serverState={server.status.state}
+                lastError={server.status.lastError}
+              />
             </TabsContent>
             <TabsContent value="backups" className="h-full m-0 overflow-auto">
               <BackupList serverId={server.id} />
