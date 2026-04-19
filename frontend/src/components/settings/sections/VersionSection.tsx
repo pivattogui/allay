@@ -1,15 +1,8 @@
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -18,13 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useUpdateServerConfig, type ServerConfig } from '@/hooks/useServerConfig'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useToast } from '@/hooks/use-toast'
 import { useJavaVersions, useRefreshJavaVersions } from '@/hooks/useJavaVersions'
 import { useMinecraftVersions } from '@/hooks/useMinecraftVersions'
+import { type ServerConfig, useUpdateServerConfig } from '@/hooks/useServerConfig'
 import { useVersionMigration } from '@/hooks/useVersionMigration'
-import { useToast } from '@/hooks/use-toast'
-import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
 
 interface VersionSectionProps {
   serverId: string
@@ -82,7 +76,9 @@ export function VersionSection({ serverId, config, isRunning }: VersionSectionPr
         <div>
           <span className="text-sm text-muted-foreground">Current Version</span>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="capitalize">{config.type}</Badge>
+            <Badge variant="outline" className="capitalize">
+              {config.type}
+            </Badge>
             <span className="font-medium">{config.version}</span>
           </div>
         </div>
@@ -95,9 +91,7 @@ export function VersionSection({ serverId, config, isRunning }: VersionSectionPr
         {isRunning && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Server must be stopped before migrating to a new version
-            </AlertDescription>
+            <AlertDescription>Server must be stopped before migrating to a new version</AlertDescription>
           </Alert>
         )}
 
@@ -124,24 +118,28 @@ export function VersionSection({ serverId, config, isRunning }: VersionSectionPr
 
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">Version</Label>
-            <Select
-              value={selectedVersion}
-              onValueChange={setSelectedVersion}
-              disabled={isRunning || loadingVersions}
-            >
+            <Select value={selectedVersion} onValueChange={setSelectedVersion} disabled={isRunning || loadingVersions}>
               <SelectTrigger>
                 <SelectValue placeholder={loadingVersions ? 'Loading...' : 'Select version'} />
               </SelectTrigger>
               <SelectContent>
                 {loadingVersions ? (
-                  <SelectItem value="_loading" disabled>Loading versions...</SelectItem>
+                  <SelectItem value="_loading" disabled>
+                    Loading versions...
+                  </SelectItem>
                 ) : versionsError ? (
-                  <SelectItem value="_error" disabled>Failed to load versions</SelectItem>
+                  <SelectItem value="_error" disabled>
+                    Failed to load versions
+                  </SelectItem>
                 ) : versions.length === 0 ? (
-                  <SelectItem value="_empty" disabled>No versions available</SelectItem>
+                  <SelectItem value="_empty" disabled>
+                    No versions available
+                  </SelectItem>
                 ) : (
                   versions.slice(0, 20).map((v) => (
-                    <SelectItem key={v} value={v}>{v}</SelectItem>
+                    <SelectItem key={v} value={v}>
+                      {v}
+                    </SelectItem>
                   ))
                 )}
               </SelectContent>
@@ -161,17 +159,8 @@ export function VersionSection({ serverId, config, isRunning }: VersionSectionPr
       <div className="space-y-4 pt-4 border-t">
         <div className="flex items-center justify-between">
           <Label>Java Runtime</Label>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => refreshJava.mutate()}
-            disabled={refreshJava.isPending}
-          >
-            {refreshJava.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
+          <Button variant="ghost" size="sm" onClick={() => refreshJava.mutate()} disabled={refreshJava.isPending}>
+            {refreshJava.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             <span className="ml-2">Refresh</span>
           </Button>
         </div>
@@ -189,7 +178,8 @@ export function VersionSection({ serverId, config, isRunning }: VersionSectionPr
               <SelectItem value="_system">System default (java)</SelectItem>
               {javaVersions.map((jv) => (
                 <SelectItem key={jv.path} value={jv.path}>
-                  {jv.vendor ? `${jv.vendor} ` : ''}{jv.version}
+                  {jv.vendor ? `${jv.vendor} ` : ''}
+                  {jv.version}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -204,9 +194,7 @@ export function VersionSection({ serverId, config, isRunning }: VersionSectionPr
             />
           )}
 
-          <p className="text-xs text-muted-foreground">
-            Select a detected Java version or enter a custom path
-          </p>
+          <p className="text-xs text-muted-foreground">Select a detected Java version or enter a custom path</p>
         </div>
 
         <Button onClick={handleSaveJava} disabled={!hasJavaChange || updateConfig.isPending}>
@@ -229,19 +217,23 @@ export function VersionSection({ serverId, config, isRunning }: VersionSectionPr
             <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                A backup will be created automatically before migration. You can restore
-                from this backup if anything goes wrong.
+                A backup will be created automatically before migration. You can restore from this backup if anything
+                goes wrong.
               </AlertDescription>
             </Alert>
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">From:</span>
-                <p className="font-medium capitalize">{config.type} {config.version}</p>
+                <p className="font-medium capitalize">
+                  {config.type} {config.version}
+                </p>
               </div>
               <div>
                 <span className="text-muted-foreground">To:</span>
-                <p className="font-medium capitalize">{selectedType} {selectedVersion}</p>
+                <p className="font-medium capitalize">
+                  {selectedType} {selectedVersion}
+                </p>
               </div>
             </div>
           </div>

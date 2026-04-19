@@ -1,12 +1,12 @@
+import { AlertTriangle, Loader2 } from 'lucide-react'
 import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
-import { Badge } from '@/components/ui/badge'
-import { useUpdateServerConfig, type ServerConfig } from '@/hooks/useServerConfig'
+import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, AlertTriangle } from 'lucide-react'
+import { type ServerConfig, useUpdateServerConfig } from '@/hooks/useServerConfig'
 
 interface ResourcesSectionProps {
   serverId: string
@@ -22,10 +22,7 @@ export function ResourcesSection({ serverId, config, isRunning }: ResourcesSecti
 
   const updateConfig = useUpdateServerConfig(serverId)
 
-  const hasChanges =
-    ramMin !== config.ramMinMb ||
-    ramMax !== config.ramMaxMb ||
-    jvmArgs !== (config.jvmArgs || '')
+  const hasChanges = ramMin !== config.ramMinMb || ramMax !== config.ramMaxMb || jvmArgs !== (config.jvmArgs || '')
 
   const handleSave = async () => {
     if (!hasChanges) return
@@ -76,13 +73,7 @@ export function ResourcesSection({ serverId, config, isRunning }: ResourcesSecti
               <span className="text-sm text-muted-foreground">Minimum</span>
               <Badge variant="outline">{formatRam(ramMin)}</Badge>
             </div>
-            <Slider
-              value={[ramMin]}
-              min={512}
-              max={ramMax}
-              step={256}
-              onValueChange={([v]) => setRamMin(v)}
-            />
+            <Slider value={[ramMin]} min={512} max={ramMax} step={256} onValueChange={([v]) => setRamMin(v)} />
           </div>
 
           <div className="space-y-2">
@@ -90,13 +81,7 @@ export function ResourcesSection({ serverId, config, isRunning }: ResourcesSecti
               <span className="text-sm text-muted-foreground">Maximum</span>
               <Badge variant="outline">{formatRam(ramMax)}</Badge>
             </div>
-            <Slider
-              value={[ramMax]}
-              min={ramMin}
-              max={32768}
-              step={256}
-              onValueChange={([v]) => setRamMax(v)}
-            />
+            <Slider value={[ramMax]} min={ramMin} max={32768} step={256} onValueChange={([v]) => setRamMax(v)} />
           </div>
         </div>
 

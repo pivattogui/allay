@@ -1,13 +1,13 @@
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react'
 
 interface SparkLineProps {
-  data: number[];
-  rawData?: number[];
-  unit?: string;
-  color?: string;
-  height?: number;
-  showGradient?: boolean;
-  className?: string;
+  data: number[]
+  rawData?: number[]
+  unit?: string
+  color?: string
+  height?: number
+  showGradient?: boolean
+  className?: string
 }
 
 export function SparkLine({
@@ -19,72 +19,70 @@ export function SparkLine({
   showGradient = true,
   className = '',
 }: SparkLineProps) {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const svgRef = useRef<SVGSVGElement>(null)
 
   const { path, gradientPath, points, lastPoint } = useMemo(() => {
     if (data.length === 0) {
-      return { path: '', gradientPath: '', points: [], lastPoint: null };
+      return { path: '', gradientPath: '', points: [], lastPoint: null }
     }
 
-    const width = 100;
-    const padding = 2;
-    const effectiveHeight = height - padding * 2;
-    const effectiveWidth = width - padding * 2;
+    const width = 100
+    const padding = 2
+    const effectiveHeight = height - padding * 2
+    const effectiveWidth = width - padding * 2
 
-    const max = Math.max(...data, 1);
-    const min = Math.min(...data, 0);
-    const range = max - min || 1;
+    const max = Math.max(...data, 1)
+    const min = Math.min(...data, 0)
+    const range = max - min || 1
 
     const pts = data.map((value, index) => {
       // Single point should be at the end (right side)
-      const x = data.length === 1
-        ? padding + effectiveWidth
-        : padding + (index / (data.length - 1)) * effectiveWidth;
-      const y = padding + effectiveHeight - ((value - min) / range) * effectiveHeight;
-      return { x, y, value };
-    });
+      const x = data.length === 1 ? padding + effectiveWidth : padding + (index / (data.length - 1)) * effectiveWidth
+      const y = padding + effectiveHeight - ((value - min) / range) * effectiveHeight
+      return { x, y, value }
+    })
 
-    const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
 
-    const lastPt = pts[pts.length - 1];
-    const firstPt = pts[0];
-    const gradPath = `${linePath} L ${lastPt.x} ${height - padding} L ${firstPt.x} ${height - padding} Z`;
+    const lastPt = pts[pts.length - 1]
+    const firstPt = pts[0]
+    const gradPath = `${linePath} L ${lastPt.x} ${height - padding} L ${firstPt.x} ${height - padding} Z`
 
     return {
       path: linePath,
       gradientPath: gradPath,
       points: pts,
       lastPoint: lastPt,
-    };
-  }, [data, height]);
+    }
+  }, [data, height])
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!svgRef.current || points.length === 0) return;
+    if (!svgRef.current || points.length === 0) return
 
-    const rect = svgRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const relativeX = x / rect.width;
-    const index = Math.round(relativeX * (points.length - 1));
-    const clampedIndex = Math.max(0, Math.min(points.length - 1, index));
+    const rect = svgRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const relativeX = x / rect.width
+    const index = Math.round(relativeX * (points.length - 1))
+    const clampedIndex = Math.max(0, Math.min(points.length - 1, index))
 
-    setHoverIndex(clampedIndex);
-    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  };
+    setHoverIndex(clampedIndex)
+    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+  }
 
   const handleMouseLeave = () => {
-    setHoverIndex(null);
-  };
+    setHoverIndex(null)
+  }
 
   // Must be before any conditional returns (React hooks rules)
-  const gradientId = useMemo(() => `sparkline-gradient-${Math.random().toString(36).substr(2, 9)}`, []);
+  const gradientId = useMemo(() => `sparkline-gradient-${Math.random().toString(36).substr(2, 9)}`, [])
 
   // Convert SVG coordinates to percentages for HTML positioning
   const getPercentPosition = (point: { x: number; y: number }) => ({
     left: `${point.x}%`,
     top: `${(point.y / height) * 100}%`,
-  });
+  })
 
   // Need at least 2 points to draw a meaningful line
   if (data.length < 2) {
@@ -92,11 +90,11 @@ export function SparkLine({
       <div className={`flex items-center justify-center ${className}`} style={{ height }}>
         <div className="h-px w-full bg-zinc-800" />
       </div>
-    );
+    )
   }
 
-  const hoverPoint = hoverIndex !== null ? points[hoverIndex] : null;
-  const hoverValue = hoverIndex !== null ? (rawData ? rawData[hoverIndex] : data[hoverIndex]) : null;
+  const hoverPoint = hoverIndex !== null ? points[hoverIndex] : null
+  const hoverValue = hoverIndex !== null ? (rawData ? rawData[hoverIndex] : data[hoverIndex]) : null
 
   return (
     <div className="relative" onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
@@ -115,9 +113,7 @@ export function SparkLine({
         </defs>
 
         {/* Gradient fill */}
-        {showGradient && (
-          <path d={gradientPath} fill={`url(#${gradientId})`} />
-        )}
+        {showGradient && <path d={gradientPath} fill={`url(#${gradientId})`} />}
 
         {/* Line */}
         <path
@@ -166,5 +162,5 @@ export function SparkLine({
         </div>
       )}
     </div>
-  );
+  )
 }

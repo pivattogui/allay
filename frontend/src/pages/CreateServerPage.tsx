@@ -1,18 +1,12 @@
-import { useState, useEffect } from 'react'
+import { ArrowLeft, Loader2, Server } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { ArrowLeft, Server, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { useCreateServer } from '@/hooks/useServerActions'
 
 interface ServerType {
@@ -60,9 +54,7 @@ export function CreateServerPage() {
             setPort(String(data.portRange.min))
           }
         }
-      } catch (err) {
-        console.error('Failed to fetch port range:', err)
-      }
+      } catch (_err) {}
     }
     loadPortRange()
   }, [])
@@ -82,8 +74,7 @@ export function CreateServerPage() {
             setType(data.types[0].id)
           }
         }
-      } catch (err) {
-        console.error('Failed to fetch server types:', err)
+      } catch (_err) {
       } finally {
         setLoadingTypes(false)
       }
@@ -111,8 +102,7 @@ export function CreateServerPage() {
             setVersion(data.versions[0])
           }
         }
-      } catch (err) {
-        console.error('Failed to fetch versions:', err)
+      } catch (_err) {
         setAvailableVersions([])
       } finally {
         setLoadingVersions(false)
@@ -136,14 +126,14 @@ export function CreateServerPage() {
     }
 
     const portNum = parseInt(port, 10)
-    if (isNaN(portNum) || portNum < portRange.min || portNum > portRange.max) {
+    if (Number.isNaN(portNum) || portNum < portRange.min || portNum > portRange.max) {
       toast.error(`Port must be between ${portRange.min} and ${portRange.max}`)
       return
     }
 
     const ramMinNum = parseInt(ramMin, 10)
     const ramMaxNum = parseInt(ramMax, 10)
-    if (isNaN(ramMinNum) || isNaN(ramMaxNum) || ramMinNum < 512 || ramMaxNum < ramMinNum) {
+    if (Number.isNaN(ramMinNum) || Number.isNaN(ramMaxNum) || ramMinNum < 512 || ramMaxNum < ramMinNum) {
       toast.error('Invalid RAM configuration')
       return
     }
@@ -170,12 +160,7 @@ export function CreateServerPage() {
       <div className="border-b border-border bg-background">
         <div className="px-6 py-4">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/servers')}
-              className="text-muted-foreground"
-            >
+            <Button variant="ghost" size="sm" onClick={() => navigate('/servers')} className="text-muted-foreground">
               <ArrowLeft className="h-4 w-4 mr-1" />
               Servers
             </Button>
@@ -217,11 +202,7 @@ export function CreateServerPage() {
                   <label htmlFor="type" className="text-sm font-medium text-foreground">
                     Server Type
                   </label>
-                  <Select
-                    value={type || undefined}
-                    onValueChange={setType}
-                    disabled={loading || loadingTypes}
-                  >
+                  <Select value={type || undefined} onValueChange={setType} disabled={loading || loadingTypes}>
                     <SelectTrigger>
                       <SelectValue placeholder={loadingTypes ? 'Loading...' : 'Select type'} />
                     </SelectTrigger>
@@ -273,7 +254,9 @@ export function CreateServerPage() {
                   required
                   disabled={loading}
                 />
-                <p className="text-xs text-muted-foreground">Allowed range: {portRange.min}–{portRange.max}</p>
+                <p className="text-xs text-muted-foreground">
+                  Allowed range: {portRange.min}–{portRange.max}
+                </p>
               </div>
 
               <Separator />
@@ -326,7 +309,6 @@ export function CreateServerPage() {
               )}
             </Button>
           </div>
-
         </form>
       </div>
     </div>

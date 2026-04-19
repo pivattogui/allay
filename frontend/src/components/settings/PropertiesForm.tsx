@@ -1,83 +1,82 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
-import { Save, Loader2, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
+import { Loader2, RefreshCw, Save } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 
 interface PropertiesFormProps {
-  serverId: string;
-  serverName: string;
+  serverId: string
+  serverName: string
 }
 
 interface Property {
-  key: string;
-  value: string;
-  type: 'string' | 'number' | 'boolean';
+  key: string
+  value: string
+  type: 'string' | 'number' | 'boolean'
 }
 
 // Common Minecraft server properties grouped by category
 const propertyCategories: Record<string, string[]> = {
-  'General': ['server-name', 'motd', 'max-players', 'white-list', 'online-mode'],
-  'World': ['level-name', 'level-seed', 'level-type', 'gamemode', 'difficulty', 'spawn-protection'],
-  'Network': ['server-port', 'server-ip', 'query.port', 'enable-query', 'enable-rcon', 'rcon.port'],
-  'Performance': ['view-distance', 'simulation-distance', 'max-tick-time', 'network-compression-threshold'],
-  'Gameplay': ['pvp', 'allow-flight', 'allow-nether', 'spawn-monsters', 'spawn-animals', 'hardcore'],
-};
+  General: ['server-name', 'motd', 'max-players', 'white-list', 'online-mode'],
+  World: ['level-name', 'level-seed', 'level-type', 'gamemode', 'difficulty', 'spawn-protection'],
+  Network: ['server-port', 'server-ip', 'query.port', 'enable-query', 'enable-rcon', 'rcon.port'],
+  Performance: ['view-distance', 'simulation-distance', 'max-tick-time', 'network-compression-threshold'],
+  Gameplay: ['pvp', 'allow-flight', 'allow-nether', 'spawn-monsters', 'spawn-animals', 'hardcore'],
+}
 
 function inferType(value: string): 'string' | 'number' | 'boolean' {
-  if (value === 'true' || value === 'false') return 'boolean';
-  if (!isNaN(Number(value)) && value.trim() !== '') return 'number';
-  return 'string';
+  if (value === 'true' || value === 'false') return 'boolean'
+  if (!Number.isNaN(Number(value)) && value.trim() !== '') return 'number'
+  return 'string'
 }
 
 export function PropertiesForm({ serverId, serverName: _serverName }: PropertiesFormProps) {
-  const [properties, setProperties] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [originalProperties, setOriginalProperties] = useState<Record<string, string>>({});
+  const [properties, setProperties] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
+  const [originalProperties, setOriginalProperties] = useState<Record<string, string>>({})
 
   const fetchProperties = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/properties`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
       if (res.ok) {
-        const data = await res.json();
-        setProperties(data.properties || {});
-        setOriginalProperties(data.properties || {});
-        setHasChanges(false);
+        const data = await res.json()
+        setProperties(data.properties || {})
+        setOriginalProperties(data.properties || {})
+        setHasChanges(false)
       }
-    } catch (err) {
-      console.error('Failed to fetch properties:', err);
-      toast.error('Failed to load server properties');
+    } catch (_err) {
+      toast.error('Failed to load server properties')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    fetchProperties();
-  }, [serverId]);
+    fetchProperties()
+  }, [fetchProperties])
 
   const handleChange = (key: string, value: string) => {
-    setProperties((prev) => ({ ...prev, [key]: value }));
-    setHasChanges(true);
-  };
+    setProperties((prev) => ({ ...prev, [key]: value }))
+    setHasChanges(true)
+  }
 
   const handleBooleanChange = (key: string, checked: boolean) => {
-    handleChange(key, checked ? 'true' : 'false');
-  };
+    handleChange(key, checked ? 'true' : 'false')
+  }
 
   const handleSave = async () => {
-    setSaving(true);
+    setSaving(true)
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/properties`, {
         method: 'PUT',
         headers: {
@@ -85,26 +84,26 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ properties }),
-      });
+      })
       if (res.ok) {
-        toast.success('Properties saved successfully');
-        setOriginalProperties(properties);
-        setHasChanges(false);
+        toast.success('Properties saved successfully')
+        setOriginalProperties(properties)
+        setHasChanges(false)
       } else {
-        const data = await res.json();
-        toast.error(data.error || 'Failed to save properties');
+        const data = await res.json()
+        toast.error(data.error || 'Failed to save properties')
       }
-    } catch (err) {
-      toast.error('Failed to save properties');
+    } catch (_err) {
+      toast.error('Failed to save properties')
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   const handleReset = () => {
-    setProperties(originalProperties);
-    setHasChanges(false);
-  };
+    setProperties(originalProperties)
+    setHasChanges(false)
+  }
 
   if (loading) {
     return (
@@ -126,32 +125,32 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
           </Card>
         ))}
       </div>
-    );
+    )
   }
 
   // Group properties by category
-  const categorizedProperties: Record<string, Property[]> = {};
-  const uncategorized: Property[] = [];
+  const categorizedProperties: Record<string, Property[]> = {}
+  const uncategorized: Property[] = []
 
   Object.entries(properties).forEach(([key, value]) => {
-    const prop: Property = { key, value, type: inferType(value) };
-    let found = false;
+    const prop: Property = { key, value, type: inferType(value) }
+    let found = false
 
     for (const [category, keys] of Object.entries(propertyCategories)) {
       if (keys.includes(key)) {
         if (!categorizedProperties[category]) {
-          categorizedProperties[category] = [];
+          categorizedProperties[category] = []
         }
-        categorizedProperties[category].push(prop);
-        found = true;
-        break;
+        categorizedProperties[category].push(prop)
+        found = true
+        break
       }
     }
 
     if (!found) {
-      uncategorized.push(prop);
+      uncategorized.push(prop)
     }
-  });
+  })
 
   return (
     <div className="p-6 space-y-6">
@@ -159,9 +158,7 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-medium text-foreground">Server Properties</h2>
-          <p className="text-sm text-muted-foreground">
-            Configure server.properties settings
-          </p>
+          <p className="text-sm text-muted-foreground">Configure server.properties settings</p>
         </div>
         <div className="flex items-center gap-2">
           {hasChanges && (
@@ -195,9 +192,7 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
           <CardContent className="space-y-4">
             {props.map((prop) => (
               <div key={prop.key} className="flex items-center gap-4">
-                <label className="w-48 text-sm text-muted-foreground flex-shrink-0">
-                  {prop.key}
-                </label>
+                <label className="w-48 text-sm text-muted-foreground flex-shrink-0">{prop.key}</label>
                 {prop.type === 'boolean' ? (
                   <Switch
                     checked={prop.value === 'true'}
@@ -226,9 +221,7 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
           <CardContent className="space-y-4">
             {uncategorized.map((prop) => (
               <div key={prop.key} className="flex items-center gap-4">
-                <label className="w-48 text-sm text-muted-foreground flex-shrink-0">
-                  {prop.key}
-                </label>
+                <label className="w-48 text-sm text-muted-foreground flex-shrink-0">{prop.key}</label>
                 {prop.type === 'boolean' ? (
                   <Switch
                     checked={prop.value === 'true'}
@@ -248,5 +241,5 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
         </Card>
       )}
     </div>
-  );
+  )
 }

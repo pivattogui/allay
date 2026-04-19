@@ -1,77 +1,66 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Play,
-  Square,
-  MoreVertical,
-  Trash2,
-  Loader2,
-} from 'lucide-react';
-import type { Server } from '@/types/server';
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { StatusBadge } from '@/components/shared/StatusBadge';
+import { Loader2, MoreVertical, Play, Square, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { StatusBadge } from '@/components/shared/StatusBadge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
+import type { Server } from '@/types/server'
 
 interface ServerCardProps {
-  server: Server;
-  pendingAction?: 'start' | 'stop' | 'delete';
-  onAction: (serverId: string, action: 'start' | 'stop' | 'delete') => void;
+  server: Server
+  pendingAction?: 'start' | 'stop' | 'delete'
+  onAction: (serverId: string, action: 'start' | 'stop' | 'delete') => void
 }
 
 function formatUptime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
   if (hours > 0) {
-    return `${hours}h ${minutes}m`;
+    return `${hours}h ${minutes}m`
   }
-  return `${minutes}m`;
+  return `${minutes}m`
 }
 
 export function ServerCard({ server, pendingAction, onAction }: ServerCardProps) {
-  const navigate = useNavigate();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const isRunning = server.status.state === 'running';
-  const isBusy = server.status.state === 'starting' || server.status.state === 'stopping';
-  const isLoading = !!pendingAction;
+  const navigate = useNavigate()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const isRunning = server.status.state === 'running'
+  const isBusy = server.status.state === 'starting' || server.status.state === 'stopping'
+  const isLoading = !!pendingAction
 
   const handleAction = (e: React.MouseEvent, action: 'start' | 'stop' | 'delete') => {
-    e.preventDefault();
-    e.stopPropagation();
-    onAction(server.id, action);
-  };
+    e.preventDefault()
+    e.stopPropagation()
+    onAction(server.id, action)
+  }
 
   const handleCardClick = () => {
-    navigate(`/servers/${server.id}`);
-  };
+    navigate(`/servers/${server.id}`)
+  }
 
   return (
     <>
       <Card
         className={cn(
-        "group relative overflow-hidden transition-all cursor-pointer",
-        isLoading ? "opacity-75 pointer-events-none" : "hover:border-muted-foreground/50"
-      )}
-      onClick={handleCardClick}
-    >
-      {isLoading && (
-        <div className="absolute inset-0 bg-background/50 z-10 flex items-center justify-center">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {pendingAction === 'start' && 'Starting server...'}
-            {pendingAction === 'stop' && 'Stopping server...'}
-            {pendingAction === 'delete' && 'Deleting server...'}
+          'group relative overflow-hidden transition-all cursor-pointer',
+          isLoading ? 'opacity-75 pointer-events-none' : 'hover:border-muted-foreground/50',
+        )}
+        onClick={handleCardClick}
+      >
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/50 z-10 flex items-center justify-center">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {pendingAction === 'start' && 'Starting server...'}
+              {pendingAction === 'stop' && 'Stopping server...'}
+              {pendingAction === 'delete' && 'Deleting server...'}
+            </div>
           </div>
-        </div>
-      )}
-      <CardContent className="p-4">
+        )}
+        <CardContent className="p-4">
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <h3 className="font-medium text-foreground truncate">{server.name}</h3>
@@ -153,8 +142,8 @@ export function ServerCard({ server, pendingAction, onAction }: ServerCardProps)
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteDialogOpen(true);
+                    e.stopPropagation()
+                    setDeleteDialogOpen(true)
                   }}
                   disabled={isRunning || isBusy || isLoading}
                 >
@@ -177,9 +166,9 @@ export function ServerCard({ server, pendingAction, onAction }: ServerCardProps)
         variant="destructive"
         loading={pendingAction === 'delete'}
         onConfirm={() => {
-          onAction(server.id, 'delete');
+          onAction(server.id, 'delete')
         }}
       />
     </>
-  );
+  )
 }

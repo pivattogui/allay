@@ -1,122 +1,122 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/shared/EmptyState';
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Archive, Download, Loader2, MoreVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { Archive, Plus, MoreVertical, RotateCcw, Trash2, Loader2, Download } from 'lucide-react';
-import { toast } from 'sonner';
-import { useBackups, useCreateBackup, useRestoreBackup, useDeleteBackup } from '@/hooks/useBackups';
-import { useAuthStore } from '@/stores';
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '@/hooks/useBackups'
+import { useAuthStore } from '@/stores'
 
 interface BackupListProps {
-  serverId: string;
+  serverId: string
 }
 
 function formatBytes(bytes: number | undefined | null): string {
-  if (!bytes || bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  if (i < 0 || i >= sizes.length) return '0 B';
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  if (!bytes || bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0 B'
+  return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleString();
+  return new Date(dateString).toLocaleString()
 }
 
 export function BackupList({ serverId }: BackupListProps) {
-  const [pollInterval, setPollInterval] = useState<number | undefined>(undefined);
-  const { data, isLoading } = useBackups(serverId, pollInterval);
-  const createBackupMutation = useCreateBackup(serverId);
-  const restoreBackupMutation = useRestoreBackup(serverId);
-  const deleteBackupMutation = useDeleteBackup(serverId);
+  const [pollInterval, setPollInterval] = useState<number | undefined>(undefined)
+  const { data, isLoading } = useBackups(serverId, pollInterval)
+  const createBackupMutation = useCreateBackup(serverId)
+  const restoreBackupMutation = useRestoreBackup(serverId)
+  const deleteBackupMutation = useDeleteBackup(serverId)
 
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'restore' | 'delete';
-    backupId: string;
-    filename: string;
-  } | null>(null);
+    type: 'restore' | 'delete'
+    backupId: string
+    filename: string
+  } | null>(null)
 
-  const backups = data?.backups || [];
-  const hasPending = backups.some(b => b.status === 'pending');
+  const backups = data?.backups || []
+  const hasPending = backups.some((b) => b.status === 'pending')
 
   useEffect(() => {
-    setPollInterval(hasPending ? 3000 : undefined);
-  }, [hasPending]);
+    setPollInterval(hasPending ? 3000 : undefined)
+  }, [hasPending])
 
   const handleCreateBackup = () => {
-    createBackupMutation.mutate('manual');
-  };
+    createBackupMutation.mutate('manual')
+  }
 
   const executeRestore = async (backupId: string) => {
-    setActionLoading(backupId);
+    setActionLoading(backupId)
     try {
-      await restoreBackupMutation.mutateAsync(backupId);
-      toast.success('Backup restored successfully');
+      await restoreBackupMutation.mutateAsync(backupId)
+      toast.success('Backup restored successfully')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to restore backup');
+      toast.error(error instanceof Error ? error.message : 'Failed to restore backup')
     } finally {
-      setActionLoading(null);
+      setActionLoading(null)
     }
-  };
+  }
 
   const executeDelete = async (backupId: string) => {
-    setActionLoading(backupId);
+    setActionLoading(backupId)
     try {
-      await deleteBackupMutation.mutateAsync(backupId);
-      toast.success('Backup deleted successfully');
+      await deleteBackupMutation.mutateAsync(backupId)
+      toast.success('Backup deleted successfully')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete backup');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete backup')
     } finally {
-      setActionLoading(null);
+      setActionLoading(null)
     }
-  };
+  }
 
   const handleConfirm = () => {
-    if (!confirmAction) return;
+    if (!confirmAction) return
     if (confirmAction.type === 'restore') {
-      executeRestore(confirmAction.backupId);
+      executeRestore(confirmAction.backupId)
     } else {
-      executeDelete(confirmAction.backupId);
+      executeDelete(confirmAction.backupId)
     }
-    setConfirmAction(null);
-  };
+    setConfirmAction(null)
+  }
 
   const handleDownloadBackup = async (backupId: string, filename: string) => {
     try {
-      const token = useAuthStore.getState().token;
+      const token = useAuthStore.getState().token
       const res = await fetch(`/api/backups/${serverId}/${backupId}/download`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      })
       if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
       } else {
-        const data = await res.json();
-        toast.error(data.error || 'Failed to download backup');
+        const data = await res.json()
+        toast.error(data.error || 'Failed to download backup')
       }
     } catch {
-      toast.error('Failed to download backup');
+      toast.error('Failed to download backup')
     }
-  };
+  }
 
   if (isLoading) {
     return (
@@ -131,7 +131,7 @@ export function BackupList({ serverId }: BackupListProps) {
           ))}
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -189,10 +189,14 @@ export function BackupList({ serverId }: BackupListProps) {
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-foreground">{backup.filename}</p>
                           {backup.status === 'pending' && (
-                            <Badge variant="outline" className="text-xs">Creating...</Badge>
+                            <Badge variant="outline" className="text-xs">
+                              Creating...
+                            </Badge>
                           )}
                           {backup.status === 'failed' && (
-                            <Badge variant="destructive" className="text-xs">Failed</Badge>
+                            <Badge variant="destructive" className="text-xs">
+                              Failed
+                            </Badge>
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -203,39 +207,43 @@ export function BackupList({ serverId }: BackupListProps) {
                       </div>
                     </div>
 
-                    {backup.status === 'completed' && <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={actionLoading === backup.id}
-                        >
-                          {actionLoading === backup.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <MoreVertical className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.filename)}>
-                          <Download className="mr-2 h-4 w-4" />
-                          Download
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setConfirmAction({ type: 'restore', backupId: backup.id, filename: backup.filename })}>
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                          Restore
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => setConfirmAction({ type: 'delete', backupId: backup.id, filename: backup.filename })}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>}
+                    {backup.status === 'completed' && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" disabled={actionLoading === backup.id}>
+                            {actionLoading === backup.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreVertical className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleDownloadBackup(backup.id, backup.filename)}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setConfirmAction({ type: 'restore', backupId: backup.id, filename: backup.filename })
+                            }
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Restore
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() =>
+                              setConfirmAction({ type: 'delete', backupId: backup.id, filename: backup.filename })
+                            }
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -246,7 +254,9 @@ export function BackupList({ serverId }: BackupListProps) {
 
       <ConfirmDialog
         open={!!confirmAction}
-        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null)
+        }}
         title={confirmAction?.type === 'restore' ? 'Restore Backup' : 'Delete Backup'}
         description={
           confirmAction?.type === 'restore'
@@ -258,5 +268,5 @@ export function BackupList({ serverId }: BackupListProps) {
         onConfirm={handleConfirm}
       />
     </>
-  );
+  )
 }

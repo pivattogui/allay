@@ -1,9 +1,9 @@
-import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface LoadingStateProps {
-  type?: 'cards' | 'list' | 'page';
-  count?: number;
+  type?: 'cards' | 'list' | 'page'
+  count?: number
 }
 
 function ServerCardSkeleton() {
@@ -40,7 +40,7 @@ function ServerCardSkeleton() {
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }
 
 export function LoadingState({ type = 'cards', count = 3 }: LoadingStateProps) {
@@ -83,7 +83,7 @@ export function LoadingState({ type = 'cards', count = 3 }: LoadingStateProps) {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   if (type === 'list') {
@@ -93,7 +93,7 @@ export function LoadingState({ type = 'cards', count = 3 }: LoadingStateProps) {
           <Skeleton key={i} className="h-12 rounded-md" />
         ))}
       </div>
-    );
+    )
   }
 
   return (
@@ -102,5 +102,5 @@ export function LoadingState({ type = 'cards', count = 3 }: LoadingStateProps) {
         <ServerCardSkeleton key={i} />
       ))}
     </div>
-  );
+  )
 }

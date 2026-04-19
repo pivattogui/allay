@@ -1,9 +1,9 @@
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Home, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Home } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
 
 export function NotFoundPage() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -25,5 +25,5 @@ export function NotFoundPage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

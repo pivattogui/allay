@@ -1,30 +1,25 @@
-import { Link, useLocation } from 'react-router-dom';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import {
-  LayoutGrid,
-  Plus,
-  LogOut,
-  ChevronRight,
-} from 'lucide-react';
-import { useServers } from '@/hooks/useServers';
-import { useAuthStore } from '@/stores';
+import { ChevronRight, LayoutGrid, LogOut, Plus } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import { useServers } from '@/hooks/useServers'
+import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores'
 
 export function Sidebar() {
-  const location = useLocation();
-  const currentPath = location.pathname;
-  const { data: servers = [] } = useServers();
-  const logout = useAuthStore((s) => s.logout);
+  const location = useLocation()
+  const currentPath = location.pathname
+  const { data: servers = [] } = useServers()
+  const logout = useAuthStore((s) => s.logout)
 
   const isActive = (path: string) => {
-    if (path === '/servers' && currentPath === '/servers') return true;
-    if (path !== '/servers' && currentPath.startsWith(path)) return true;
-    return false;
-  };
+    if (path === '/servers' && currentPath === '/servers') return true
+    if (path !== '/servers' && currentPath.startsWith(path)) return true
+    return false
+  }
 
-  const runningServers = servers.filter((s) => s.status.state === 'running').length;
+  const runningServers = servers.filter((s) => s.status.state === 'running').length
 
   return (
     <div className="flex h-screen w-[220px] flex-col border-r border-border bg-background">
@@ -55,9 +50,7 @@ export function Sidebar() {
 
         <div className="mt-6">
           <div className="flex items-center justify-between px-2 mb-2">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Servers
-            </span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Servers</span>
             <span className="text-xs text-muted-foreground">
               {runningServers}/{servers.length}
             </span>
@@ -78,7 +71,7 @@ export function Sidebar() {
                       server.status.state === 'starting' && 'bg-yellow-500',
                       server.status.state === 'stopping' && 'bg-yellow-500',
                       server.status.state === 'crashed' && 'bg-red-500',
-                      server.status.state === 'stopped' && 'bg-muted-foreground'
+                      server.status.state === 'stopped' && 'bg-muted-foreground',
                     )}
                   />
                   <span className="truncate flex-1 text-left">{server.name}</span>
@@ -88,9 +81,7 @@ export function Sidebar() {
             ))}
 
             {servers.length === 0 && (
-              <p className="px-2 py-4 text-sm text-muted-foreground text-center">
-                No servers yet
-              </p>
+              <p className="px-2 py-4 text-sm text-muted-foreground text-center">No servers yet</p>
             )}
           </div>
 
@@ -118,5 +109,5 @@ export function Sidebar() {
         </Button>
       </div>
     </div>
-  );
+  )
 }

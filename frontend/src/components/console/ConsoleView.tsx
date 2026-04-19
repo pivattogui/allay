@@ -1,72 +1,72 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import { useWebSocket, LogEntry, ServerMetrics } from '@/hooks/useWebSocket';
-import { MetricsChart } from '@/components/MetricsChart';
-import { Send, ChevronDown, ChevronUp, Wifi, WifiOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ChevronDown, ChevronUp, Send, Wifi, WifiOff } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { MetricsChart } from '@/components/MetricsChart'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { type LogEntry, type ServerMetrics, useWebSocket } from '@/hooks/useWebSocket'
+import { cn } from '@/lib/utils'
 
 interface ConsoleViewProps {
-  serverId: string;
-  serverName: string;
-  isRunning: boolean;
+  serverId: string
+  serverName: string
+  isRunning: boolean
 }
 
 export function ConsoleView({ serverId, serverName: _serverName, isRunning }: ConsoleViewProps) {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [metricsHistory, setMetricsHistory] = useState<ServerMetrics[]>([]);
-  const [command, setCommand] = useState('');
-  const [showMetrics, setShowMetrics] = useState(true);
-  const logsEndRef = useRef<HTMLDivElement>(null);
-  const logsContainerRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [metricsHistory, setMetricsHistory] = useState<ServerMetrics[]>([])
+  const [command, setCommand] = useState('')
+  const [showMetrics, setShowMetrics] = useState(true)
+  const logsEndRef = useRef<HTMLDivElement>(null)
+  const logsContainerRef = useRef<HTMLDivElement>(null)
+  const [autoScroll, setAutoScroll] = useState(true)
 
   const handleLog = useCallback((log: LogEntry) => {
     setLogs((prev) => {
-      const newLogs = [...prev, log];
+      const newLogs = [...prev, log]
       if (newLogs.length > 500) {
-        return newLogs.slice(-500);
+        return newLogs.slice(-500)
       }
-      return newLogs;
-    });
-  }, []);
+      return newLogs
+    })
+  }, [])
 
   const handleMetrics = useCallback((m: ServerMetrics) => {
     setMetricsHistory((prev) => {
-      const newHistory = [...prev, m];
+      const newHistory = [...prev, m]
       if (newHistory.length > 60) {
-        return newHistory.slice(-60);
+        return newHistory.slice(-60)
       }
-      return newHistory;
-    });
-  }, []);
+      return newHistory
+    })
+  }, [])
 
   const { connected } = useWebSocket({
     serverId,
     channels: ['logs', 'metrics'],
     onLog: handleLog,
     onMetrics: handleMetrics,
-  });
+  })
 
   useEffect(() => {
     if (autoScroll && logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [logs, autoScroll]);
+  }, [autoScroll])
 
   const handleScroll = () => {
-    if (!logsContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-    setAutoScroll(isAtBottom);
-  };
+    if (!logsContainerRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
+    setAutoScroll(isAtBottom)
+  }
 
   const sendCommand = async () => {
-    if (!command.trim()) return;
+    if (!command.trim()) return
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       await fetch(`/api/servers/${serverId}/command`, {
         method: 'POST',
         headers: {
@@ -74,25 +74,23 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ command: command.trim() }),
-      });
-      setCommand('');
-    } catch (err) {
-      console.error('Failed to send command:', err);
-    }
-  };
+      })
+      setCommand('')
+    } catch (_err) {}
+  }
 
   const getLogLevelColor = (level: string) => {
     switch (level.toLowerCase()) {
       case 'error':
-        return 'text-red-400';
+        return 'text-red-400'
       case 'warn':
-        return 'text-yellow-400';
+        return 'text-yellow-400'
       case 'info':
-        return 'text-blue-400';
+        return 'text-blue-400'
       default:
-        return 'text-muted-foreground';
+        return 'text-muted-foreground'
     }
-  };
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -103,11 +101,7 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
           className="w-full px-6 py-3 flex items-center justify-between text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <span>Server Metrics</span>
-          {showMetrics ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
+          {showMetrics ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
         {showMetrics && (
           <div className="px-6 pb-4">
@@ -128,13 +122,9 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
           className="h-full overflow-y-auto bg-black rounded-lg p-4 console-text text-sm"
         >
           {!isRunning ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              Server is not running
-            </div>
+            <div className="flex items-center justify-center h-full text-muted-foreground">Server is not running</div>
           ) : logs.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              Waiting for logs...
-            </div>
+            <div className="flex items-center justify-center h-full text-muted-foreground">Waiting for logs...</div>
           ) : (
             <div className="space-y-0.5">
               {logs.map((log, i) => (
@@ -142,9 +132,7 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
                   <span className="text-muted-foreground flex-shrink-0 tabular-nums">
                     {new Date(log.timestamp).toLocaleTimeString()}
                   </span>
-                  <span className={cn(getLogLevelColor(log.level), 'flex-shrink-0 uppercase w-12')}>
-                    [{log.level}]
-                  </span>
+                  <span className={cn(getLogLevelColor(log.level), 'flex-shrink-0 uppercase w-12')}>[{log.level}]</span>
                   <span className="text-gray-200 break-all">{log.message}</span>
                 </div>
               ))}
@@ -175,7 +163,7 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && sendCommand()}
-              placeholder={isRunning ? "Enter command (e.g., list, say Hello)..." : "Server is not running"}
+              placeholder={isRunning ? 'Enter command (e.g., list, say Hello)...' : 'Server is not running'}
               className="console-text"
               disabled={!isRunning}
             />
@@ -186,5 +174,5 @@ export function ConsoleView({ serverId, serverName: _serverName, isRunning }: Co
         </div>
       </div>
     </div>
-  );
+  )
 }

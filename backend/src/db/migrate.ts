@@ -1,6 +1,9 @@
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import { db } from './index.js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator'
+import { createLogger } from '../logger.js'
+import { db } from './index.js'
 
-await migrate(db, { migrationsFolder: './drizzle' });
-console.log('Migrations completed');
-process.exit(0);
+const log = createLogger('migrate')
+
+await migrate(db, { migrationsFolder: './drizzle' })
+log.info('Database migrations completed')
+process.exit(0)

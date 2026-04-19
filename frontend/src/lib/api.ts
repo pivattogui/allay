@@ -1,5 +1,5 @@
-import type { Server, Backup } from '../types/server'
 import { useAuthStore } from '../stores'
+import type { Backup, Server } from '../types/server'
 
 function getAuthHeaders(): HeadersInit {
   // Use store's token as single source of truth
@@ -206,10 +206,7 @@ export async function deleteBackup(serverId: string, backupId: string): Promise<
   if (!res.ok) throw new Error('Failed to delete backup')
 }
 
-export async function updateBackupConfig(
-  serverId: string,
-  config: Partial<BackupConfig>
-): Promise<BackupConfig> {
+export async function updateBackupConfig(serverId: string, config: Partial<BackupConfig>): Promise<BackupConfig> {
   const res = await fetch(`/api/backups/${serverId}/config`, {
     method: 'PATCH',
     headers: {
@@ -229,7 +226,7 @@ export async function updateBackupConfig(
 export function importBackup(
   serverId: string,
   file: File,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
 ): Promise<{ message: string; backupId: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -303,7 +300,11 @@ export const api = {
     return { data }
   },
 
-  async post<T = unknown>(url: string, body?: unknown, options?: { headers?: Record<string, string> }): Promise<{ data: T }> {
+  async post<T = unknown>(
+    url: string,
+    body?: unknown,
+    options?: { headers?: Record<string, string> },
+  ): Promise<{ data: T }> {
     const isFormData = body instanceof FormData
     const res = await fetch(`/api${url}`, {
       method: 'POST',

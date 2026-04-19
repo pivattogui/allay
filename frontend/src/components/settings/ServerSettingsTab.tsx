@@ -1,19 +1,14 @@
-import { useServerConfig } from '@/hooks/useServerConfig'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion'
-import { MetadataSection } from './sections/MetadataSection'
-import { ResourcesSection } from './sections/ResourcesSection'
-import { VersionSection } from './sections/VersionSection'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useServerConfig } from '@/hooks/useServerConfig'
 import { AutomationSection } from './sections/AutomationSection'
 import { BackupSection } from './sections/BackupSection'
 import { GameSettingsSection } from './sections/GameSettingsSection'
+import { MetadataSection } from './sections/MetadataSection'
+import { ResourcesSection } from './sections/ResourcesSection'
+import { VersionSection } from './sections/VersionSection'
 
 interface ServerSettingsTabProps {
   serverId: string
@@ -38,9 +33,7 @@ export function ServerSettingsTab({ serverId, isRunning }: ServerSettingsTabProp
       <div className="p-6">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to load server configuration. Please try again.
-          </AlertDescription>
+          <AlertDescription>Failed to load server configuration. Please try again.</AlertDescription>
         </Alert>
       </div>
     )
@@ -62,9 +55,7 @@ export function ServerSettingsTab({ serverId, isRunning }: ServerSettingsTabProp
           <AccordionTrigger className="hover:no-underline">
             <div className="flex items-center gap-2">
               <span className="font-medium">Resources</span>
-              {isRunning && (
-                <span className="text-xs text-muted-foreground">(restart required for changes)</span>
-              )}
+              {isRunning && <span className="text-xs text-muted-foreground">(restart required for changes)</span>}
             </div>
           </AccordionTrigger>
           <AccordionContent>

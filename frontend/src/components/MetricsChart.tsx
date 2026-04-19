@@ -1,38 +1,38 @@
-import { useMemo } from 'react';
-import { ServerMetrics } from '@/hooks/useWebSocket';
-import { Cpu, MemoryStick, Users, Power } from 'lucide-react';
-import { SparkLine } from '@/components/ui/sparkline';
+import { Cpu, MemoryStick, Power, Users } from 'lucide-react'
+import { useMemo } from 'react'
+import { SparkLine } from '@/components/ui/sparkline'
+import type { ServerMetrics } from '@/hooks/useWebSocket'
 
 interface MetricsChartProps {
-  history: ServerMetrics[];
-  maxPoints?: number;
-  isRunning?: boolean;
+  history: ServerMetrics[]
+  maxPoints?: number
+  isRunning?: boolean
 }
 
 interface MetricCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  subValue?: string;
-  percentage: number;
-  color: 'blue' | 'emerald' | 'violet';
-  data: number[];
-  rawData: number[];
-  unit: string;
+  icon: React.ReactNode
+  label: string
+  value: string
+  subValue?: string
+  percentage: number
+  color: 'blue' | 'emerald' | 'violet'
+  data: number[]
+  rawData: number[]
+  unit: string
 }
 
 const colorHex = {
   blue: '#3b82f6',
   emerald: '#10b981',
   violet: '#8b5cf6',
-};
+}
 
 function MetricCard({ icon, label, value, subValue, percentage, color, data, rawData, unit }: MetricCardProps) {
   const colorClasses = {
     blue: 'bg-blue-500',
     emerald: 'bg-emerald-500',
     violet: 'bg-violet-500',
-  };
+  }
 
   return (
     <div className="rounded-xl bg-card/50 p-4 ring-1 ring-border">
@@ -44,9 +44,7 @@ function MetricCard({ icon, label, value, subValue, percentage, color, data, raw
         </div>
         <div className="text-right">
           <span className="text-lg font-semibold text-foreground">{value}</span>
-          {subValue && (
-            <span className="text-sm text-muted-foreground/70 ml-1">{subValue}</span>
-          )}
+          {subValue && <span className="text-sm text-muted-foreground/70 ml-1">{subValue}</span>}
         </div>
       </div>
 
@@ -63,19 +61,30 @@ function MetricCard({ icon, label, value, subValue, percentage, color, data, raw
         />
       </div>
     </div>
-  );
+  )
 }
 
 export function MetricsChart({ history, maxPoints = 30, isRunning = true }: MetricsChartProps) {
   const data = useMemo(() => {
-    const points = history.slice(-maxPoints);
-    if (points.length === 0) return { cpu: [], ram: [], players: [], cpuRaw: [], ramRaw: [], playersRaw: [], maxRam: 100, ramPercent: 0, playerPercent: 0 };
+    const points = history.slice(-maxPoints)
+    if (points.length === 0)
+      return {
+        cpu: [],
+        ram: [],
+        players: [],
+        cpuRaw: [],
+        ramRaw: [],
+        playersRaw: [],
+        maxRam: 100,
+        ramPercent: 0,
+        playerPercent: 0,
+      }
 
-    const maxRam = Math.max(...points.map((p) => p.ramMaxMb || p.ramUsedMb * 2), 1024);
-    const latestRam = points[points.length - 1]?.ramUsedMb || 0;
-    const latestMaxRam = points[points.length - 1]?.ramMaxMb || maxRam;
-    const latestPlayers = points[points.length - 1]?.playerCount || 0;
-    const latestMaxPlayers = points[points.length - 1]?.playerMax || 20;
+    const maxRam = Math.max(...points.map((p) => p.ramMaxMb || p.ramUsedMb * 2), 1024)
+    const latestRam = points[points.length - 1]?.ramUsedMb || 0
+    const latestMaxRam = points[points.length - 1]?.ramMaxMb || maxRam
+    const latestPlayers = points[points.length - 1]?.playerCount || 0
+    const latestMaxPlayers = points[points.length - 1]?.playerMax || 20
 
     return {
       cpu: points.map((p) => Math.min(100, p.cpuPercent)),
@@ -87,10 +96,10 @@ export function MetricsChart({ history, maxPoints = 30, isRunning = true }: Metr
       maxRam: latestMaxRam,
       ramPercent: (latestRam / latestMaxRam) * 100,
       playerPercent: (latestPlayers / latestMaxPlayers) * 100,
-    };
-  }, [history, maxPoints]);
+    }
+  }, [history, maxPoints])
 
-  const latest = history[history.length - 1];
+  const latest = history[history.length - 1]
 
   // Show offline state when server is not running
   if (!isRunning) {
@@ -106,7 +115,7 @@ export function MetricsChart({ history, maxPoints = 30, isRunning = true }: Metr
           </p>
         </div>
       </div>
-    );
+    )
   }
 
   // Show loading skeleton when waiting for metrics data
@@ -114,10 +123,7 @@ export function MetricsChart({ history, maxPoints = 30, isRunning = true }: Metr
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {['CPU', 'Memory', 'Players'].map((label) => (
-          <div
-            key={label}
-            className="rounded-xl bg-card/50 p-4 ring-1 ring-border animate-pulse"
-          >
+          <div key={label} className="rounded-xl bg-card/50 p-4 ring-1 ring-border animate-pulse">
             <div className="flex justify-between mb-4">
               <div className="h-4 bg-muted rounded w-16" />
               <div className="h-4 bg-muted rounded w-12" />
@@ -127,14 +133,14 @@ export function MetricsChart({ history, maxPoints = 30, isRunning = true }: Metr
           </div>
         ))}
       </div>
-    );
+    )
   }
 
-  const cpuValue = latest?.cpuPercent ?? 0;
-  const ramUsed = latest?.ramUsedMb ?? 0;
-  const ramMax = latest?.ramMaxMb || data.maxRam;
-  const playerCount = latest?.playerCount ?? 0;
-  const playerMax = latest?.playerMax ?? 20;
+  const cpuValue = latest?.cpuPercent ?? 0
+  const ramUsed = latest?.ramUsedMb ?? 0
+  const ramMax = latest?.ramMaxMb || data.maxRam
+  const playerCount = latest?.playerCount ?? 0
+  const playerMax = latest?.playerMax ?? 20
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -173,12 +179,12 @@ export function MetricsChart({ history, maxPoints = 30, isRunning = true }: Metr
         unit=""
       />
     </div>
-  );
+  )
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)}MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)}MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`
 }

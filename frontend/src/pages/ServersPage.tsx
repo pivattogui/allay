@@ -1,12 +1,12 @@
+import { Plus, Server } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingState } from '@/components/shared/LoadingState'
-import { Server, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useDeleteServer, useStartServer, useStopServer } from '@/hooks/useServerActions'
 import { useServers } from '@/hooks/useServers'
 import { useUIStore } from '@/stores'
-import { useStartServer, useStopServer, useDeleteServer } from '@/hooks/useServerActions'
 
 export function ServersPage() {
   const navigate = useNavigate()
@@ -48,7 +48,12 @@ export function ServersPage() {
           <h1 className="text-2xl font-semibold text-foreground">Servers</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {servers.length} server{servers.length !== 1 ? 's' : ''}
-            {runningCount > 0 && <> · <span className="text-green-500">{runningCount} running</span></>}
+            {runningCount > 0 && (
+              <>
+                {' '}
+                · <span className="text-green-500">{runningCount} running</span>
+              </>
+            )}
           </p>
         </div>
         <Button onClick={() => navigate('/servers/new')}>
@@ -82,7 +87,6 @@ export function ServersPage() {
           </div>
         </div>
       )}
-
     </div>
   )
 }

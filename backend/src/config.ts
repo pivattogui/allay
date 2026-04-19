@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import path from 'node:path';
+import path from 'node:path'
+import { z } from 'zod'
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -10,22 +10,25 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('24h'),
   MC_PORT_MIN: z.coerce.number().int().min(1024).max(65535).default(25565),
   MC_PORT_MAX: z.coerce.number().int().min(1024).max(65535).default(25575),
-});
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+})
 
-const parsed = envSchema.safeParse(process.env);
+const parsed = envSchema.safeParse(process.env)
 
 if (!parsed.success) {
-  console.error('Invalid environment variables:', parsed.error.flatten().fieldErrors);
-  process.exit(1);
+  // biome-ignore lint/suspicious/noConsole: logger unavailable before config is parsed
+  console.error('Invalid environment variables:', parsed.error.flatten().fieldErrors)
+  process.exit(1)
 }
 
-const env = parsed.data;
+const env = parsed.data
 
 export const config = {
   env: env.NODE_ENV,
   isDev: env.NODE_ENV === 'development',
   isProd: env.NODE_ENV === 'production',
   port: env.PORT,
+  logLevel: env.LOG_LEVEL,
   databaseUrl: env.DATABASE_URL,
 
   paths: {
@@ -52,6 +55,6 @@ export const config = {
     maxRestarts: 3,
     restartWindowMs: 600000,
   },
-} as const;
+} as const
 
-export type Config = typeof config;
+export type Config = typeof config

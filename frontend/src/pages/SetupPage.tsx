@@ -1,10 +1,10 @@
+import { CheckCircle2, Loader2, Lock, User } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { User, Lock, Loader2, CheckCircle2 } from 'lucide-react'
-import { useAuthStore } from '@/stores'
+import { Input } from '@/components/ui/input'
 import { setupAdmin } from '@/lib/api'
+import { useAuthStore } from '@/stores'
 
 export function SetupPage() {
   const setSetupRequired = useAuthStore((s) => s.setSetupRequired)

@@ -1,6 +1,6 @@
-export { FileBrowser } from './FileBrowser';
-export { FileTree } from './FileTree';
-export { FileEditor } from './FileEditor';
-export { FileBreadcrumb } from './FileBreadcrumb';
-export { FileUploader } from './FileUploader';
-export type { FileEntry } from './FileBrowser';
+export { FileBreadcrumb } from './FileBreadcrumb'
+export type { FileEntry } from './FileBrowser'
+export { FileBrowser } from './FileBrowser'
+export { FileEditor } from './FileEditor'
+export { FileTree } from './FileTree'
+export { FileUploader } from './FileUploader'

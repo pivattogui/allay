@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
-import { useBackups, useUpdateBackupConfig } from '@/hooks/useBackups'
-import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+import { useBackups, useUpdateBackupConfig } from '@/hooks/useBackups'
 
 interface BackupSectionProps {
   serverId: string
@@ -74,21 +74,21 @@ export function BackupSection({ serverId }: BackupSectionProps) {
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label htmlFor="backup-enabled" className="text-sm font-medium">Automatic Backups</Label>
+              <Label htmlFor="backup-enabled" className="text-sm font-medium">
+                Automatic Backups
+              </Label>
               <p className="text-xs text-muted-foreground">Schedule periodic backups automatically</p>
             </div>
-            <Switch
-              id="backup-enabled"
-              checked={editEnabled}
-              onCheckedChange={setEditEnabled}
-            />
+            <Switch id="backup-enabled" checked={editEnabled} onCheckedChange={setEditEnabled} />
           </div>
 
           {editEnabled && (
             <div className="space-y-3 pt-2 border-t">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="interval" className="text-xs">Interval (minutes)</Label>
+                  <Label htmlFor="interval" className="text-xs">
+                    Interval (minutes)
+                  </Label>
                   <Input
                     id="interval"
                     type="number"
@@ -100,7 +100,9 @@ export function BackupSection({ serverId }: BackupSectionProps) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="max-backups" className="text-xs">Max backups to keep</Label>
+                  <Label htmlFor="max-backups" className="text-xs">
+                    Max backups to keep
+                  </Label>
                   <Input
                     id="max-backups"
                     type="number"
@@ -115,7 +117,9 @@ export function BackupSection({ serverId }: BackupSectionProps) {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="include-logs" className="text-xs">Include logs</Label>
+                  <Label htmlFor="include-logs" className="text-xs">
+                    Include logs
+                  </Label>
                   <p className="text-xs text-muted-foreground">Include server log files in backups</p>
                 </div>
                 <Switch
@@ -128,11 +132,7 @@ export function BackupSection({ serverId }: BackupSectionProps) {
             </div>
           )}
 
-          <Button
-            onClick={handleSaveConfig}
-            disabled={updateConfigMutation.isPending}
-            size="sm"
-          >
+          <Button onClick={handleSaveConfig} disabled={updateConfigMutation.isPending} size="sm">
             {updateConfigMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

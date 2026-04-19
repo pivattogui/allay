@@ -1,11 +1,11 @@
+import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-react'
-import { useAuthStore } from '@/stores'
+import { Input } from '@/components/ui/input'
 import { login as loginApi } from '@/lib/api'
+import { useAuthStore } from '@/stores'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -40,9 +40,7 @@ export function LoginPage() {
         <div className="flex flex-col items-center mb-8">
           <img src="/allay-icon.svg" alt="Allay" className="h-16 w-16 mb-4 logo-glow" />
           <h1 className="text-2xl font-medium text-foreground tracking-[0.2em] uppercase">Allay</h1>
-          <p className="text-xs text-muted-foreground mt-2 tracking-[0.25em] uppercase">
-            Server Management
-          </p>
+          <p className="text-xs text-muted-foreground mt-2 tracking-[0.25em] uppercase">Server Management</p>
         </div>
 
         <Card className="border-border glass-card login-card-border">
@@ -101,11 +99,7 @@ export function LoginPage() {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     tabIndex={-1}
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>

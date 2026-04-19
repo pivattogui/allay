@@ -1,168 +1,180 @@
-import { Elysia } from 'elysia';
-import { cors } from '@elysiajs/cors';
-import { jwt } from '@elysiajs/jwt';
-import { swagger } from '@elysiajs/swagger';
-import { eq } from 'drizzle-orm';
-import { config } from './config.js';
-import { db } from './db/index.js';
-import { servers } from './db/schema.js';
-import { authRoutes } from './routes/auth.js';
-import { serversRoutes } from './routes/servers.js';
-import { systemRoutes } from './routes/system.js';
-import { backupsRoutes } from './routes/backups.js';
-import { filesRoutes } from './routes/files.js';
-import { setupWebSocket } from './websocket/handler.js';
-import { backupManager } from './modules/backups/index.js';
-import { restartScheduler } from './modules/scheduler/restart-scheduler.js';
-import { processManager } from './modules/process/index.js';
+import { cors } from '@elysiajs/cors'
+import { jwt } from '@elysiajs/jwt'
+import { swagger } from '@elysiajs/swagger'
+import { eq } from 'drizzle-orm'
+import { Elysia } from 'elysia'
+import { config } from './config.js'
+import { db } from './db/index.js'
+import { servers } from './db/schema.js'
+import { AppError } from './errors.js'
+import { createLogger } from './logger.js'
+import { backupManager } from './modules/backups/index.js'
+import { processManager } from './modules/process/index.js'
+import { restartScheduler } from './modules/scheduler/restart-scheduler.js'
+import { authRoutes } from './routes/auth.js'
+import { backupsRoutes } from './routes/backups.js'
+import { filesRoutes } from './routes/files.js'
+import { serversRoutes } from './routes/servers.js'
+import { systemRoutes } from './routes/system.js'
+import { setupWebSocket } from './websocket/handler.js'
+
+const log = createLogger('app')
 export function buildApp() {
   const app = new Elysia()
-    .use(swagger({
-      path: '/docs',
-      documentation: {
-        info: {
-          title: 'Allay API',
-          version: '1.0.0',
-          description: 'Minecraft Server Management API - Manage server lifecycle, backups, files, and real-time monitoring.',
-        },
-        tags: [
-          { name: 'auth', description: 'Authentication and user management' },
-          { name: 'servers', description: 'Server CRUD and control operations' },
-          { name: 'backups', description: 'Backup management and restore' },
-          { name: 'files', description: 'Server file browser and editor' },
-          { name: 'system', description: 'System information and versions' },
-        ],
-        components: {
-          securitySchemes: {
-            bearerAuth: {
-              type: 'http',
-              scheme: 'bearer',
-              bearerFormat: 'JWT',
-              description: 'JWT token obtained from /api/auth/login',
+    .use(
+      swagger({
+        path: '/docs',
+        documentation: {
+          info: {
+            title: 'Allay API',
+            version: '1.0.0',
+            description:
+              'Minecraft Server Management API - Manage server lifecycle, backups, files, and real-time monitoring.',
+          },
+          tags: [
+            { name: 'auth', description: 'Authentication and user management' },
+            { name: 'servers', description: 'Server CRUD and control operations' },
+            { name: 'backups', description: 'Backup management and restore' },
+            { name: 'files', description: 'Server file browser and editor' },
+            { name: 'system', description: 'System information and versions' },
+          ],
+          components: {
+            securitySchemes: {
+              bearerAuth: {
+                type: 'http',
+                scheme: 'bearer',
+                bearerFormat: 'JWT',
+                description: 'JWT token obtained from /api/auth/login',
+              },
             },
           },
         },
-      },
-      exclude: ['/health', '/ws'],
-    }))
-    .use(cors({
-      origin: config.isDev ? true : ['http://localhost:8080'],
-      credentials: true,
-    }))
-    .use(jwt({
-      name: 'jwt',
-      secret: config.jwt.secret,
-      exp: config.jwt.expiresIn,
-    }))
-    .onAfterResponse({ as: 'global' }, ({ request, path, set }) => {
-      if (config.isDev) {
-        console.log(`${request.method} ${path} ${set.status || 200}`);
-      }
-    })
+        exclude: ['/health', '/ws'],
+      }),
+    )
+    .use(
+      cors({
+        origin: config.isDev ? true : ['http://localhost:8080'],
+        credentials: true,
+      }),
+    )
+    .use(
+      jwt({
+        name: 'jwt',
+        secret: config.jwt.secret,
+        exp: config.jwt.expiresIn,
+      }),
+    )
     .get('/health', () => ({
       status: 'ok',
       timestamp: new Date().toISOString(),
     }))
     .onError({ as: 'global' }, ({ code, error, set, request }) => {
       if (code === 'VALIDATION') {
-        set.status = 400;
+        set.status = 400
         return {
           error: 'Validation Error',
           code: 'VALIDATION_ERROR',
           details: error.message,
-        };
+        }
       }
 
-      console.error(`[Error] ${request.method} ${request.url}:`, error);
-      const statusCode = set.status && typeof set.status === 'number' && set.status >= 400
-        ? set.status
-        : 500;
-      set.status = statusCode;
+      if (error instanceof AppError) {
+        set.status = error.statusCode
+        return {
+          error: error.message,
+          code: error.code,
+          ...('details' in error && error.details ? { details: error.details } : {}),
+        }
+      }
+
+      log.error({ method: request.method, url: request.url, err: error }, 'Unhandled error')
+      set.status = 500
       return {
-        error: 'message' in error ? error.message : 'Internal Server Error',
+        error: 'Internal Server Error',
         code: 'INTERNAL_ERROR',
-      };
+      }
     })
     .use(authRoutes)
     .use(serversRoutes)
     .use(systemRoutes)
     .use(backupsRoutes)
     .use(filesRoutes)
-    .use(setupWebSocket);
+    .use(setupWebSocket)
 
-  return app;
+  return app
 }
 
 export async function initializeServices() {
-  const restartAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
+  const restartAttempts = new Map<string, { count: number; firstAttemptAt: number }>()
 
-  await backupManager.initializeSchedules();
-  await restartScheduler.initialize();
+  await backupManager.initializeSchedules()
+  await restartScheduler.initialize()
 
-  // Auto-start servers
-  const autoStartServers = await db.select().from(servers).where(eq(servers.autoStart, true));
+  const autoStartServers = await db.select().from(servers).where(eq(servers.autoStart, true))
   for (const server of autoStartServers) {
     try {
-      console.info(`[AutoStart] Starting server ${server.name} (${server.id})`);
-      await processManager.start(server as any);
-      console.info(`[AutoStart] Server ${server.name} started successfully`);
+      log.info({ serverId: server.id, name: server.name }, 'Auto-starting server')
+      await processManager.start(server as any)
     } catch (err) {
-      console.error(`[AutoStart] Failed to start server ${server.name}: ${err instanceof Error ? err.message : String(err)}`);
+      log.error({ serverId: server.id, err }, 'Auto-start failed')
     }
   }
 
   restartScheduler.on('server:restart-scheduled', async (serverId: string) => {
-    const status = processManager.getStatus(serverId);
+    const status = processManager.getStatus(serverId)
     if (status.state === 'running') {
-      console.info(`[RestartScheduler] Restarting server ${serverId}`);
       try {
-        await processManager.stop(serverId);
-        const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);
+        log.info({ serverId }, 'Scheduled restart triggered')
+        await processManager.stop(serverId)
+        const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1)
         if (server) {
-          await processManager.start(server as any);
-          console.info(`[RestartScheduler] Server ${serverId} restarted successfully`);
+          await processManager.start(server as any)
         }
       } catch (err) {
-        console.error(`[RestartScheduler] Failed to restart server ${serverId}: ${err instanceof Error ? err.message : String(err)}`);
+        log.error({ serverId, err }, 'Scheduled restart failed')
       }
     } else {
-      console.info(`[RestartScheduler] Server ${serverId} not running, skipping restart`);
+      log.debug({ serverId, state: status.state }, 'Scheduled restart skipped — server not running')
     }
-  });
+  })
 
-  processManager.on('exit', async (serverId: string, code: number | null, _signal: string | null, wasRunning: boolean) => {
-    if (!wasRunning) return;
-    if (code === 0) return;
+  processManager.on(
+    'exit',
+    async (serverId: string, code: number | null, signal: string | null, wasRunning: boolean) => {
+      if (!wasRunning) return
+      if (code === 0) return
 
-    const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);
-    if (!server || !server.autoRestart) return;
+      log.warn({ serverId, exitCode: code, signal }, 'Server process exited unexpectedly')
 
-    const now = Date.now();
-    const windowMs = config.minecraft.restartWindowMs;
-    let attempts = restartAttempts.get(serverId);
+      const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1)
+      if (!server?.autoRestart) return
 
-    if (!attempts || (now - attempts.firstAttemptAt) > windowMs) {
-      attempts = { count: 0, firstAttemptAt: now };
-    }
+      const now = Date.now()
+      const windowMs = config.minecraft.restartWindowMs
+      let attempts = restartAttempts.get(serverId)
 
-    attempts.count++;
-    restartAttempts.set(serverId, attempts);
+      if (!attempts || now - attempts.firstAttemptAt > windowMs) {
+        attempts = { count: 0, firstAttemptAt: now }
+      }
 
-    if (attempts.count > server.restartLimit) {
-      console.warn(`[AutoRestart] Server ${server.name} exceeded restart limit (${server.restartLimit}) within ${windowMs / 1000}s window`);
-      return;
-    }
+      attempts.count++
+      restartAttempts.set(serverId, attempts)
 
-    console.info(`[AutoRestart] Server ${server.name} crashed, restarting (attempt ${attempts.count}/${server.restartLimit})`);
+      if (attempts.count > server.restartLimit) {
+        log.warn({ serverId, attempts: attempts.count, limit: server.restartLimit }, 'Auto-restart limit reached')
+        return
+      }
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      await processManager.start(server as any);
-      console.info(`[AutoRestart] Server ${server.name} restarted successfully`);
-    } catch (err) {
-      console.error(`[AutoRestart] Failed to restart server ${server.name}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  });
+      try {
+        log.info({ serverId, attempt: attempts.count }, 'Auto-restarting crashed server')
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        await processManager.start(server as any)
+      } catch (err) {
+        log.error({ serverId, err }, 'Auto-restart failed')
+      }
+    },
+  )
 }
 
-export type App = ReturnType<typeof buildApp>;
+export type App = ReturnType<typeof buildApp>

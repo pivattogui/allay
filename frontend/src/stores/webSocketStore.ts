@@ -112,7 +112,7 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
             type: 'subscribe',
             serverId: currentState.currentSubscription.serverId,
             channels: currentState.currentSubscription.channels,
-          })
+          }),
         )
       }
     }
@@ -136,7 +136,7 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
             }
             break
 
-          case 'status':
+          case 'status': {
             if (message.data && currentState.onStatus) {
               currentState.onStatus(message.data as ServerStatus)
             }
@@ -157,10 +157,9 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
               set({ invalidationTimeoutId: timeoutId })
             }
             break
+          }
         }
-      } catch (err) {
-        console.error('[WebSocket] Failed to parse message:', err)
-      }
+      } catch (_err) {}
     }
 
     ws.onclose = () => {
@@ -175,9 +174,7 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
       set({ reconnectTimeoutId: timeoutId })
     }
 
-    ws.onerror = (err) => {
-      console.error('[WebSocket] Error:', err)
-    }
+    ws.onerror = (_err) => {}
 
     set({ ws })
   },
@@ -200,7 +197,7 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
           type: 'subscribe',
           serverId,
           channels,
-        })
+        }),
       )
     }
     // Se ainda está conectando, o onopen vai enviar o subscribe
@@ -216,7 +213,7 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
           type: 'unsubscribe',
           serverId: state.currentSubscription.serverId,
           channels: state.currentSubscription.channels,
-        })
+        }),
       )
     }
 
@@ -231,7 +228,7 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
           type: 'command',
           serverId: state.currentSubscription.serverId,
           command,
-        })
+        }),
       )
     }
   },

@@ -1,3 +1,5 @@
+import { AlertTriangle, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -5,20 +7,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+} from '@/components/ui/dialog'
 
 interface ConfirmDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  variant?: 'default' | 'destructive';
-  loading?: boolean;
-  onConfirm: () => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  description: string
+  confirmLabel?: string
+  cancelLabel?: string
+  variant?: 'default' | 'destructive'
+  loading?: boolean
+  onConfirm: () => void
 }
 
 export function ConfirmDialog({
@@ -33,8 +33,8 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   const handleConfirm = () => {
-    onConfirm();
-  };
+    onConfirm()
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -48,18 +48,12 @@ export function ConfirmDialog({
             )}
             <div>
               <DialogTitle>{title}</DialogTitle>
-              <DialogDescription className="mt-1">
-                {description}
-              </DialogDescription>
+              <DialogDescription className="mt-1">{description}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
         <DialogFooter className="mt-4">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             {cancelLabel}
           </Button>
           <Button
@@ -79,5 +73,5 @@ export function ConfirmDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

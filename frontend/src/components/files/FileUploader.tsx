@@ -1,115 +1,108 @@
-import { useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Upload, X, FileIcon, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { AlertCircle, CheckCircle2, FileIcon, Loader2, Upload, X } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 
 interface FileUploaderProps {
-  serverId: string;
-  currentPath: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onUploadComplete: () => void;
+  serverId: string
+  currentPath: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onUploadComplete: () => void
 }
 
 interface UploadFile {
-  file: File;
-  status: 'pending' | 'uploading' | 'success' | 'error';
-  progress?: number;
-  error?: string;
+  file: File
+  status: 'pending' | 'uploading' | 'success' | 'error'
+  progress?: number
+  error?: string
 }
 
 function formatSize(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  if (i < 0 || i >= sizes.length) return '0 B';
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0 B'
+  return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`
 }
 
-export function FileUploader({
-  serverId,
-  currentPath,
-  open,
-  onOpenChange,
-  onUploadComplete,
-}: FileUploaderProps) {
-  const [files, setFiles] = useState<UploadFile[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+export function FileUploader({ serverId, currentPath, open, onOpenChange, onUploadComplete }: FileUploaderProps) {
+  const [files, setFiles] = useState<UploadFile[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    addFiles(droppedFiles);
-  }, []);
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files);
-      addFiles(selectedFiles);
-      e.target.value = '';
-    }
-  }, []);
-
-  const addFiles = (newFiles: File[]) => {
+  const addFiles = useCallback((newFiles: File[]) => {
     const uploadFiles: UploadFile[] = newFiles.map((file) => ({
       file,
       status: 'pending' as const,
-    }));
-    setFiles((prev) => [...prev, ...uploadFiles]);
-  };
+    }))
+    setFiles((prev) => [...prev, ...uploadFiles])
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragging(false)
+
+      const droppedFiles = Array.from(e.dataTransfer.files)
+      addFiles(droppedFiles)
+    },
+    [addFiles],
+  )
+
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+        const selectedFiles = Array.from(e.target.files)
+        addFiles(selectedFiles)
+        e.target.value = ''
+      }
+    },
+    [addFiles],
+  )
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
+    setFiles((prev) => prev.filter((_, i) => i !== index))
+  }
 
   const clearFiles = () => {
-    setFiles([]);
-  };
+    setFiles([])
+  }
 
   const handleUpload = async () => {
-    if (files.length === 0) return;
+    if (files.length === 0) return
 
-    setIsUploading(true);
+    setIsUploading(true)
 
-    const formData = new FormData();
+    const formData = new FormData()
     files.forEach(({ file }) => {
-      formData.append('files', file);
-    });
+      formData.append('files', file)
+    })
 
     // Mark all as uploading
-    setFiles((prev) =>
-      prev.map((f) => ({ ...f, status: 'uploading' as const }))
-    );
+    setFiles((prev) => prev.map((f) => ({ ...f, status: 'uploading' as const })))
 
     try {
-      const token = localStorage.getItem('token');
-      const url = new URL(`/api/servers/${serverId}/files/upload`, window.location.origin);
+      const token = localStorage.getItem('token')
+      const url = new URL(`/api/servers/${serverId}/files/upload`, window.location.origin)
       if (currentPath) {
-        url.searchParams.set('path', currentPath);
+        url.searchParams.set('path', currentPath)
       }
 
       const res = await fetch(url.toString(), {
@@ -118,56 +111,53 @@ export function FileUploader({
           Authorization: `Bearer ${token}`,
         },
         body: formData,
-      });
+      })
 
       if (res.ok) {
-        const data = await res.json();
-        setFiles((prev) =>
-          prev.map((f) => ({ ...f, status: 'success' as const }))
-        );
-        toast.success(`Uploaded ${data.count} file(s)`);
+        const data = await res.json()
+        setFiles((prev) => prev.map((f) => ({ ...f, status: 'success' as const })))
+        toast.success(`Uploaded ${data.count} file(s)`)
 
         // Close after a short delay to show success state
         setTimeout(() => {
-          onOpenChange(false);
-          clearFiles();
-          onUploadComplete();
-        }, 1000);
+          onOpenChange(false)
+          clearFiles()
+          onUploadComplete()
+        }, 1000)
       } else {
-        const err = await res.json();
+        const err = await res.json()
         setFiles((prev) =>
           prev.map((f) => ({
             ...f,
             status: 'error' as const,
             error: err.error || 'Upload failed',
-          }))
-        );
-        toast.error(err.error || 'Failed to upload files');
+          })),
+        )
+        toast.error(err.error || 'Failed to upload files')
       }
-    } catch (err) {
-      console.error('Upload error:', err);
+    } catch (_err) {
       setFiles((prev) =>
         prev.map((f) => ({
           ...f,
           status: 'error' as const,
           error: 'Network error',
-        }))
-      );
-      toast.error('Failed to upload files');
+        })),
+      )
+      toast.error('Failed to upload files')
     } finally {
-      setIsUploading(false);
+      setIsUploading(false)
     }
-  };
+  }
 
   const handleClose = () => {
     if (!isUploading) {
-      onOpenChange(false);
-      clearFiles();
+      onOpenChange(false)
+      clearFiles()
     }
-  };
+  }
 
-  const pendingCount = files.filter((f) => f.status === 'pending').length;
-  const totalSize = files.reduce((acc, f) => acc + f.file.size, 0);
+  const pendingCount = files.filter((f) => f.status === 'pending').length
+  const totalSize = files.reduce((acc, f) => acc + f.file.size, 0)
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -180,26 +170,16 @@ export function FileUploader({
         <div
           className={cn(
             'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
-            isDragging
-              ? 'border-primary bg-primary/10'
-              : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+            isDragging ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 hover:border-muted-foreground/50',
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
           <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground mb-2">
-            Drag and drop files here, or
-          </p>
+          <p className="text-sm text-muted-foreground mb-2">Drag and drop files here, or</p>
           <label>
-            <input
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-              disabled={isUploading}
-            />
+            <input type="file" multiple onChange={handleFileSelect} className="hidden" disabled={isUploading} />
             <Button variant="secondary" size="sm" asChild disabled={isUploading}>
               <span className="cursor-pointer">Browse Files</span>
             </Button>
@@ -210,16 +190,11 @@ export function FileUploader({
         {files.length > 0 && (
           <div className="space-y-2 max-h-48 overflow-auto">
             {files.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-3 p-2 rounded bg-muted/50"
-              >
+              <div key={index} className="flex items-center gap-3 p-2 rounded bg-muted/50">
                 <FileIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm truncate">{item.file.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatSize(item.file.size)}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{formatSize(item.file.size)}</p>
                 </div>
                 {item.status === 'pending' && (
                   <Button
@@ -232,15 +207,9 @@ export function FileUploader({
                     <X className="h-4 w-4" />
                   </Button>
                 )}
-                {item.status === 'uploading' && (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                )}
-                {item.status === 'success' && (
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                )}
-                {item.status === 'error' && (
-                  <AlertCircle className="h-4 w-4 text-destructive" />
-                )}
+                {item.status === 'uploading' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {item.status === 'success' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                {item.status === 'error' && <AlertCircle className="h-4 w-4 text-destructive" />}
               </div>
             ))}
           </div>
@@ -253,19 +222,10 @@ export function FileUploader({
               {pendingCount} file(s) · {formatSize(totalSize)}
             </p>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearFiles}
-                disabled={isUploading}
-              >
+              <Button variant="outline" size="sm" onClick={clearFiles} disabled={isUploading}>
                 Clear
               </Button>
-              <Button
-                size="sm"
-                onClick={handleUpload}
-                disabled={isUploading || pendingCount === 0}
-              >
+              <Button size="sm" onClick={handleUpload} disabled={isUploading || pendingCount === 0}>
                 {isUploading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -288,5 +248,5 @@ export function FileUploader({
         </p>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

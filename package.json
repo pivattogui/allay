@@ -1,0 +1,21 @@
+{
+  "name": "allay",
+  "private": true,
+  "packageManager": "pnpm@10.20.0",
+  "scripts": {
+    "dev": "concurrently -n be,fe -c blue,green \"pnpm -F allay-backend dev\" \"pnpm -F allay-frontend dev\"",
+    "dev:backend": "pnpm -F allay-backend dev",
+    "dev:frontend": "pnpm -F allay-frontend dev",
+    "build": "pnpm -r build",
+    "lint": "biome ci .",
+    "format": "biome format --write . && biome check --fix .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:backend": "pnpm -F allay-backend test",
+    "test:frontend": "pnpm -F allay-frontend test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.12",
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,18 +1,12 @@
+import { Clock, Loader2, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { useUpdateServerConfig, type ServerConfig } from '@/hooks/useServerConfig'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Clock, RotateCcw } from 'lucide-react'
+import { type ServerConfig, useUpdateServerConfig } from '@/hooks/useServerConfig'
 
 interface AutomationSectionProps {
   serverId: string
@@ -31,14 +25,14 @@ export function AutomationSection({ serverId, config }: AutomationSectionProps) 
   const hasChanges =
     autoStart !== config.autoStart ||
     autoRestart !== config.autoRestart ||
-    parseInt(restartLimit) !== config.restartLimit ||
+    parseInt(restartLimit, 10) !== config.restartLimit ||
     (restartSchedule === 'none' ? null : restartSchedule) !== config.restartSchedule
 
   const handleSave = async () => {
     if (!hasChanges) return
 
-    const limit = parseInt(restartLimit)
-    if (isNaN(limit) || limit < 0 || limit > 100) {
+    const limit = parseInt(restartLimit, 10)
+    if (Number.isNaN(limit) || limit < 0 || limit > 100) {
       toast({ title: 'Restart limit must be between 0 and 100', variant: 'destructive' })
       return
     }
@@ -64,16 +58,9 @@ export function AutomationSection({ serverId, config }: AutomationSectionProps) 
           <Label htmlFor="auto-start" className="text-base">
             Auto-start on Launch
           </Label>
-          <p className="text-sm text-muted-foreground">
-            Automatically start the server when the application launches
-          </p>
+          <p className="text-sm text-muted-foreground">Automatically start the server when the application launches</p>
         </div>
-        <Switch
-          id="auto-start"
-          checked={autoStart}
-          onCheckedChange={setAutoStart}
-          disabled={updateConfig.isPending}
-        />
+        <Switch id="auto-start" checked={autoStart} onCheckedChange={setAutoStart} disabled={updateConfig.isPending} />
       </div>
 
       {/* Auto-restart Toggle */}
@@ -82,9 +69,7 @@ export function AutomationSection({ serverId, config }: AutomationSectionProps) 
           <Label htmlFor="auto-restart" className="text-base">
             Auto-restart on Crash
           </Label>
-          <p className="text-sm text-muted-foreground">
-            Automatically restart the server if it crashes unexpectedly
-          </p>
+          <p className="text-sm text-muted-foreground">Automatically restart the server if it crashes unexpectedly</p>
         </div>
         <Switch
           id="auto-restart"
@@ -110,9 +95,7 @@ export function AutomationSection({ serverId, config }: AutomationSectionProps) 
           disabled={updateConfig.isPending}
           className="w-32"
         />
-        <p className="text-xs text-muted-foreground">
-          Maximum number of restart attempts before giving up (0-100)
-        </p>
+        <p className="text-xs text-muted-foreground">Maximum number of restart attempts before giving up (0-100)</p>
       </div>
 
       {/* Restart Schedule */}
@@ -149,9 +132,8 @@ export function AutomationSection({ serverId, config }: AutomationSectionProps) 
           {restartSchedule === 'none'
             ? 'No scheduled restarts'
             : restartSchedule === 'custom'
-            ? 'Enter a cron expression (e.g., 0 0 * * * for daily at midnight)'
-            : 'Server will restart automatically on this schedule'
-          }
+              ? 'Enter a cron expression (e.g., 0 0 * * * for daily at midnight)'
+              : 'Server will restart automatically on this schedule'}
         </p>
       </div>
 

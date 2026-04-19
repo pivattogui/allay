@@ -1,204 +1,199 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
-import { EmptyState } from '@/components/shared/EmptyState';
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { FileTree } from './FileTree';
-import { FileEditor } from './FileEditor';
-import { FileBreadcrumb } from './FileBreadcrumb';
-import { FileUploader } from './FileUploader';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { FolderPlus, Upload, RefreshCw, FolderOpen, FileArchive, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { importBackup } from '@/lib/api';
-import { useQueryClient } from '@tanstack/react-query';
-import { serverKeys } from '@/lib/queryKeys';
+import { useQueryClient } from '@tanstack/react-query'
+import { FileArchive, FolderOpen, FolderPlus, Loader2, RefreshCw, Upload } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
+import { importBackup } from '@/lib/api'
+import { serverKeys } from '@/lib/queryKeys'
+import { FileBreadcrumb } from './FileBreadcrumb'
+import { FileEditor } from './FileEditor'
+import { FileTree } from './FileTree'
+import { FileUploader } from './FileUploader'
 
 export interface FileEntry {
-  name: string;
-  type: 'file' | 'directory';
-  size: number;
-  modified: string;
-  extension?: string;
-  editable?: boolean;
-  sensitive?: boolean;
-  fileType?: 'text' | 'config' | 'image' | 'archive' | 'binary';
+  name: string
+  type: 'file' | 'directory'
+  size: number
+  modified: string
+  extension?: string
+  editable?: boolean
+  sensitive?: boolean
+  fileType?: 'text' | 'config' | 'image' | 'archive' | 'binary'
 }
 
 interface FileBrowserProps {
-  serverId: string;
-  serverName: string;
-  isRunning?: boolean;
+  serverId: string
+  serverName: string
+  isRunning?: boolean
 }
 
 export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
-  const [currentPath, setCurrentPath] = useState('');
-  const [entries, setEntries] = useState<FileEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<{ path: string; entry: FileEntry } | null>(null);
-  const [editorContent, setEditorContent] = useState<string | null>(null);
-  const [editorLoading, setEditorLoading] = useState(false);
-  const [isModified, setIsModified] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [newFolderName, setNewFolderName] = useState<string | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
-  const [discardCallback, setDiscardCallback] = useState<(() => void) | null>(null);
+  const [currentPath, setCurrentPath] = useState('')
+  const [entries, setEntries] = useState<FileEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedFile, setSelectedFile] = useState<{ path: string; entry: FileEntry } | null>(null)
+  const [editorContent, setEditorContent] = useState<string | null>(null)
+  const [editorLoading, setEditorLoading] = useState(false)
+  const [isModified, setIsModified] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [newFolderName, setNewFolderName] = useState<string | null>(null)
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null)
+  const [discardCallback, setDiscardCallback] = useState<(() => void) | null>(null)
 
   // Import state
-  const queryClient = useQueryClient();
-  const importInputRef = useRef<HTMLInputElement>(null);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importProgress, setImportProgress] = useState(0);
-  const [importing, setImporting] = useState(false);
+  const queryClient = useQueryClient()
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importProgress, setImportProgress] = useState(0)
+  const [importing, setImporting] = useState(false)
 
   const handleImportSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files?.[0]
     if (file) {
-      setImportFile(file);
-      setImportOpen(true);
+      setImportFile(file)
+      setImportOpen(true)
     }
-    if (importInputRef.current) importInputRef.current.value = '';
-  }, []);
+    if (importInputRef.current) importInputRef.current.value = ''
+  }, [])
 
   const handleImport = async () => {
-    if (!importFile) return;
-    setImporting(true);
-    setImportProgress(0);
+    if (!importFile) return
+    setImporting(true)
+    setImportProgress(0)
 
     try {
-      const result = await importBackup(serverId, importFile, setImportProgress);
-      toast.success(result.message);
-      queryClient.invalidateQueries({ queryKey: serverKeys.backups(serverId) });
-      setImportOpen(false);
-      setImportFile(null);
-      fetchEntries(currentPath);
+      const result = await importBackup(serverId, importFile, setImportProgress)
+      toast.success(result.message)
+      queryClient.invalidateQueries({ queryKey: serverKeys.backups(serverId) })
+      setImportOpen(false)
+      setImportFile(null)
+      fetchEntries(currentPath)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Import failed');
+      toast.error(error instanceof Error ? error.message : 'Import failed')
     } finally {
-      setImporting(false);
-      setImportProgress(0);
+      setImporting(false)
+      setImportProgress(0)
     }
-  };
+  }
 
-  const fetchEntries = useCallback(async (path: string = '') => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/servers/${serverId}/files/list`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ path }),
-      });
+  const fetchEntries = useCallback(
+    async (path: string = '') => {
+      setLoading(true)
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`/api/servers/${serverId}/files/list`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ path }),
+        })
 
-      if (res.ok) {
-        const data = await res.json();
-        setEntries(data.entries || []);
-        setCurrentPath(data.path === '/' ? '' : data.path);
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to load files');
+        if (res.ok) {
+          const data = await res.json()
+          setEntries(data.entries || [])
+          setCurrentPath(data.path === '/' ? '' : data.path)
+        } else {
+          const err = await res.json()
+          toast.error(err.error || 'Failed to load files')
+        }
+      } catch (_err) {
+        toast.error('Failed to load files')
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      console.error('Failed to fetch files:', err);
-      toast.error('Failed to load files');
-    } finally {
-      setLoading(false);
-    }
-  }, [serverId]);
+    },
+    [serverId],
+  )
 
   useEffect(() => {
-    fetchEntries(currentPath);
-  }, [serverId]);
+    fetchEntries(currentPath)
+  }, [fetchEntries, currentPath])
 
   const discardAndDo = (action: () => void) => {
     if (isModified) {
-      setDiscardCallback(() => action);
-      return;
+      setDiscardCallback(() => action)
+      return
     }
-    action();
-  };
+    action()
+  }
 
   const handleNavigate = (path: string) => {
     discardAndDo(() => {
-      setSelectedFile(null);
-      setEditorContent(null);
-      setIsModified(false);
-      fetchEntries(path);
-    });
-  };
+      setSelectedFile(null)
+      setEditorContent(null)
+      setIsModified(false)
+      fetchEntries(path)
+    })
+  }
 
   const openFile = async (entry: FileEntry) => {
-    const filePath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
-    setSelectedFile({ path: filePath, entry });
-    setEditorLoading(true);
-    setIsModified(false);
+    const filePath = currentPath ? `${currentPath}/${entry.name}` : entry.name
+    setSelectedFile({ path: filePath, entry })
+    setEditorLoading(true)
+    setIsModified(false)
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/read/${filePath}`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json()
         if (data.tooLarge) {
-          toast.error('File is too large to edit (max 1MB)');
-          setSelectedFile(null);
-          setEditorContent(null);
+          toast.error('File is too large to edit (max 1MB)')
+          setSelectedFile(null)
+          setEditorContent(null)
         } else if (data.content === null) {
-          toast.info(data.message || 'Cannot edit this file');
-          setSelectedFile(null);
-          setEditorContent(null);
+          toast.info(data.message || 'Cannot edit this file')
+          setSelectedFile(null)
+          setEditorContent(null)
         } else {
-          setEditorContent(data.content);
+          setEditorContent(data.content)
         }
       } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to read file');
-        setSelectedFile(null);
+        const err = await res.json()
+        toast.error(err.error || 'Failed to read file')
+        setSelectedFile(null)
       }
-    } catch (err) {
-      console.error('Failed to read file:', err);
-      toast.error('Failed to read file');
-      setSelectedFile(null);
+    } catch (_err) {
+      toast.error('Failed to read file')
+      setSelectedFile(null)
     } finally {
-      setEditorLoading(false);
+      setEditorLoading(false)
     }
-  };
+  }
 
   const handleSelect = (entry: FileEntry) => {
     if (entry.type === 'directory') {
-      const newPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
-      handleNavigate(newPath);
-      return;
+      const newPath = currentPath ? `${currentPath}/${entry.name}` : entry.name
+      handleNavigate(newPath)
+      return
     }
 
     if (!entry.editable) {
-      toast.info('This file type cannot be edited. Use download instead.');
-      return;
+      toast.info('This file type cannot be edited. Use download instead.')
+      return
     }
 
-    discardAndDo(() => openFile(entry));
-  };
+    discardAndDo(() => openFile(entry))
+  }
 
   const handleSave = async () => {
-    if (!selectedFile || editorContent === null) return;
+    if (!selectedFile || editorContent === null) return
 
-    setIsSaving(true);
+    setIsSaving(true)
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/write/${selectedFile.path}`, {
         method: 'PUT',
         headers: {
@@ -206,71 +201,69 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content: editorContent }),
-      });
+      })
 
       if (res.ok) {
-        toast.success('File saved');
-        setIsModified(false);
-        fetchEntries(currentPath);
+        toast.success('File saved')
+        setIsModified(false)
+        fetchEntries(currentPath)
       } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to save file');
+        const err = await res.json()
+        toast.error(err.error || 'Failed to save file')
       }
-    } catch (err) {
-      console.error('Failed to save file:', err);
-      toast.error('Failed to save file');
+    } catch (_err) {
+      toast.error('Failed to save file')
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
-  };
+  }
 
   const handleCloseEditor = () => {
     discardAndDo(() => {
-      setSelectedFile(null);
-      setEditorContent(null);
-      setIsModified(false);
-    });
-  };
+      setSelectedFile(null)
+      setEditorContent(null)
+      setIsModified(false)
+    })
+  }
 
   const handleDeleteRequest = (entry: FileEntry) => {
-    setDeleteTarget(entry);
-  };
+    setDeleteTarget(entry)
+  }
 
   const executeDelete = async (entry: FileEntry) => {
-    const itemPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+    const itemPath = currentPath ? `${currentPath}/${entry.name}` : entry.name
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/${itemPath}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (res.ok) {
-        toast.success(`${entry.type === 'directory' ? 'Folder' : 'File'} deleted`);
+        toast.success(`${entry.type === 'directory' ? 'Folder' : 'File'} deleted`)
         if (selectedFile?.path === itemPath) {
-          setSelectedFile(null);
-          setEditorContent(null);
+          setSelectedFile(null)
+          setEditorContent(null)
         }
-        fetchEntries(currentPath);
+        fetchEntries(currentPath)
       } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to delete');
+        const err = await res.json()
+        toast.error(err.error || 'Failed to delete')
       }
-    } catch (err) {
-      console.error('Failed to delete:', err);
-      toast.error('Failed to delete');
+    } catch (_err) {
+      toast.error('Failed to delete')
     }
-  };
+  }
 
   const handleRename = async (entry: FileEntry, newName: string) => {
-    if (newName === entry.name || !newName.trim()) return;
+    if (newName === entry.name || !newName.trim()) return
 
-    const oldPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
-    const newPath = currentPath ? `${currentPath}/${newName}` : newName;
+    const oldPath = currentPath ? `${currentPath}/${entry.name}` : entry.name
+    const newPath = currentPath ? `${currentPath}/${newName}` : newName
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/rename`, {
         method: 'POST',
         headers: {
@@ -278,81 +271,78 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ oldPath, newPath }),
-      });
+      })
 
       if (res.ok) {
-        toast.success('Renamed successfully');
+        toast.success('Renamed successfully')
         if (selectedFile?.path === oldPath) {
-          setSelectedFile({ ...selectedFile, path: newPath });
+          setSelectedFile({ ...selectedFile, path: newPath })
         }
-        fetchEntries(currentPath);
+        fetchEntries(currentPath)
       } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to rename');
+        const err = await res.json()
+        toast.error(err.error || 'Failed to rename')
       }
-    } catch (err) {
-      console.error('Failed to rename:', err);
-      toast.error('Failed to rename');
+    } catch (_err) {
+      toast.error('Failed to rename')
     }
-  };
+  }
 
   const handleDownload = async (entry: FileEntry) => {
-    const filePath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+    const filePath = currentPath ? `${currentPath}/${entry.name}` : entry.name
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/download/${filePath}`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = entry.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = entry.name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
       } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to download');
+        const err = await res.json()
+        toast.error(err.error || 'Failed to download')
       }
-    } catch (err) {
-      console.error('Failed to download:', err);
-      toast.error('Failed to download');
+    } catch (_err) {
+      toast.error('Failed to download')
     }
-  };
+  }
 
   const handleCreateFolder = async () => {
     if (!newFolderName?.trim()) {
-      setNewFolderName(null);
-      return;
+      setNewFolderName(null)
+      return
     }
 
-    const folderPath = currentPath ? `${currentPath}/${newFolderName}` : newFolderName;
+    const folderPath = currentPath ? `${currentPath}/${newFolderName}` : newFolderName
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/mkdir/${folderPath}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (res.ok) {
-        toast.success('Folder created');
-        setNewFolderName(null);
-        fetchEntries(currentPath);
+        toast.success('Folder created')
+        setNewFolderName(null)
+        fetchEntries(currentPath)
       } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to create folder');
+        const err = await res.json()
+        toast.error(err.error || 'Failed to create folder')
       }
-    } catch (err) {
-      console.error('Failed to create folder:', err);
-      toast.error('Failed to create folder');
+    } catch (_err) {
+      toast.error('Failed to create folder')
     }
-  };
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -361,21 +351,11 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
         <FileBreadcrumb path={currentPath} onNavigate={handleNavigate} />
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchEntries(currentPath)}
-            disabled={loading}
-          >
+          <Button variant="outline" size="sm" onClick={() => fetchEntries(currentPath)} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setNewFolderName('')}
-            disabled={newFolderName !== null}
-          >
+          <Button variant="outline" size="sm" onClick={() => setNewFolderName('')} disabled={newFolderName !== null}>
             <FolderPlus className="h-4 w-4 mr-2" />
             New Folder
           </Button>
@@ -386,9 +366,8 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => isRunning
-              ? toast.error('Stop the server before importing a backup')
-              : importInputRef.current?.click()
+            onClick={() =>
+              isRunning ? toast.error('Stop the server before importing a backup') : importInputRef.current?.click()
             }
             disabled={importing}
           >
@@ -451,8 +430,8 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
               content={editorContent}
               sensitive={selectedFile.entry.sensitive}
               onChange={(content) => {
-                setEditorContent(content);
-                setIsModified(true);
+                setEditorContent(content)
+                setIsModified(true)
               }}
               onSave={handleSave}
               onClose={handleCloseEditor}
@@ -480,26 +459,28 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
       />
 
       {/* Import Backup Dialog */}
-      <Dialog open={importOpen} onOpenChange={(open) => {
-        if (!importing) {
-          setImportOpen(open);
-          if (!open) setImportFile(null);
-        }
-      }}>
+      <Dialog
+        open={importOpen}
+        onOpenChange={(open) => {
+          if (!importing) {
+            setImportOpen(open)
+            if (!open) setImportFile(null)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Import Backup</DialogTitle>
             <DialogDescription>
-              This will create a safety backup of the current server, then replace all content with the imported archive.
+              This will create a safety backup of the current server, then replace all content with the imported
+              archive.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             {importFile && (
               <div className="text-sm">
                 <p className="font-medium">{importFile.name}</p>
-                <p className="text-muted-foreground">
-                  {(importFile.size / 1024 / 1024).toFixed(1)} MB
-                </p>
+                <p className="text-muted-foreground">{(importFile.size / 1024 / 1024).toFixed(1)} MB</p>
               </div>
             )}
 
@@ -516,17 +497,14 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setImportOpen(false);
-                  setImportFile(null);
+                  setImportOpen(false)
+                  setImportFile(null)
                 }}
                 disabled={importing}
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleImport}
-                disabled={importing || !importFile}
-              >
+              <Button onClick={handleImport} disabled={importing || !importFile}>
                 {importing ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -544,33 +522,37 @@ export function FileBrowser({ serverId, isRunning }: FileBrowserProps) {
       {/* Delete Confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
         title={`Delete ${deleteTarget?.type === 'directory' ? 'Folder' : 'File'}`}
         description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => {
-          if (deleteTarget) executeDelete(deleteTarget);
-          setDeleteTarget(null);
+          if (deleteTarget) executeDelete(deleteTarget)
+          setDeleteTarget(null)
         }}
       />
 
       {/* Unsaved Changes Confirmation */}
       <ConfirmDialog
         open={!!discardCallback}
-        onOpenChange={(open) => { if (!open) setDiscardCallback(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDiscardCallback(null)
+        }}
         title="Unsaved Changes"
         description="You have unsaved changes. Discard them?"
         confirmLabel="Discard"
         variant="destructive"
         onConfirm={() => {
           if (discardCallback) {
-            setIsModified(false);
-            discardCallback();
+            setIsModified(false)
+            discardCallback()
           }
-          setDiscardCallback(null);
+          setDiscardCallback(null)
         }}
       />
     </div>
-  );
+  )
 }

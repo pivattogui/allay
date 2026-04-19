@@ -1,7 +1,7 @@
 export interface WSClient {
-  readonly id: string;
-  send(data: string | ArrayBuffer | Uint8Array): void;
-  readonly readyState: number;
+  readonly id: string
+  send(data: string | ArrayBuffer | Uint8Array): void
+  readonly readyState: number
 }
 
-export const WS_OPEN = 1;
+export const WS_OPEN = 1

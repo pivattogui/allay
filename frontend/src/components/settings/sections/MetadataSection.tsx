@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'react'
+import { Image, Loader2, Trash2, Upload } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useUpdateServerConfig, useUploadServerIcon, useDeleteServerIcon, type ServerConfig } from '@/hooks/useServerConfig'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Upload, Trash2, Image } from 'lucide-react'
-import { useDropzone } from 'react-dropzone'
+import {
+  type ServerConfig,
+  useDeleteServerIcon,
+  useUpdateServerConfig,
+  useUploadServerIcon,
+} from '@/hooks/useServerConfig'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores'
 
@@ -16,7 +21,7 @@ interface MetadataSectionProps {
 
 export function MetadataSection({ serverId, config }: MetadataSectionProps) {
   const [name, setName] = useState(config.name)
-  const [iconKey, setIconKey] = useState(Date.now())
+  const [_iconKey, setIconKey] = useState(Date.now())
   const [iconUrl, setIconUrl] = useState<string | null>(null)
   const { toast } = useToast()
   const token = useAuthStore((state) => state.token)
@@ -53,7 +58,7 @@ export function MetadataSection({ serverId, config }: MetadataSectionProps) {
         URL.revokeObjectURL(iconUrl)
       }
     }
-  }, [serverId, config.iconPath, iconKey, token])
+  }, [serverId, config.iconPath, token, iconUrl])
 
   const updateConfig = useUpdateServerConfig(serverId)
   const uploadIcon = useUploadServerIcon(serverId)
@@ -113,16 +118,11 @@ export function MetadataSection({ serverId, config }: MetadataSectionProps) {
             placeholder="My Server"
             maxLength={50}
           />
-          <Button
-            onClick={handleSaveName}
-            disabled={name === config.name || isLoading}
-          >
+          <Button onClick={handleSaveName} disabled={name === config.name || isLoading}>
             {updateConfig.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Display name for the server (1-50 characters)
-        </p>
+        <p className="text-xs text-muted-foreground">Display name for the server (1-50 characters)</p>
       </div>
 
       {/* Server Icon */}
@@ -132,11 +132,7 @@ export function MetadataSection({ serverId, config }: MetadataSectionProps) {
           {/* Icon Preview */}
           <div className="w-16 h-16 border rounded-lg overflow-hidden bg-muted flex items-center justify-center">
             {config.iconPath && iconUrl ? (
-              <img
-                src={iconUrl}
-                alt="Server icon"
-                className="w-full h-full object-cover"
-              />
+              <img src={iconUrl} alt="Server icon" className="w-full h-full object-cover" />
             ) : (
               <Image className="h-8 w-8 text-muted-foreground" />
             )}
@@ -148,7 +144,7 @@ export function MetadataSection({ serverId, config }: MetadataSectionProps) {
               {...getRootProps()}
               className={cn(
                 'border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors',
-                isDragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'
+                isDragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50',
               )}
             >
               <input {...getInputProps()} />
@@ -160,9 +156,7 @@ export function MetadataSection({ serverId, config }: MetadataSectionProps) {
                   <p className="text-sm text-muted-foreground mt-2">
                     {isDragActive ? 'Drop image here' : 'Drag & drop or click to upload'}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    PNG, JPG, GIF (max 5MB, will resize to 64x64)
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF (max 5MB, will resize to 64x64)</p>
                 </>
               )}
             </div>

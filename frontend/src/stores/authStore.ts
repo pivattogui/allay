@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { checkAuthStatus, checkAuthMe } from '../lib/api'
+import { checkAuthMe, checkAuthStatus } from '../lib/api'
 
 interface AuthState {
   isAuthenticated: boolean | null
@@ -65,6 +65,6 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       partialize: (state) => ({ token: state.token }),
-    }
-  )
+    },
+  ),
 )

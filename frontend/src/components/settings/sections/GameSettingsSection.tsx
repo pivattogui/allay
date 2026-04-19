@@ -1,20 +1,14 @@
-import { useState, useEffect } from 'react'
+import { AlertTriangle, Loader2, RotateCcw, Save } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useServerProperties, useUpdateServerProperties } from '@/hooks/useServerProperties'
+import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, AlertTriangle, Save, RotateCcw } from 'lucide-react'
+import { useServerProperties, useUpdateServerProperties } from '@/hooks/useServerProperties'
 
 interface GameSettingsSectionProps {
   serverId: string
@@ -128,9 +122,7 @@ export function GameSettingsSection({ serverId, isRunning }: GameSettingsSection
       {isRunning && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            Changes will take effect after server restart
-          </AlertDescription>
+          <AlertDescription>Changes will take effect after server restart</AlertDescription>
         </Alert>
       )}
 
@@ -143,9 +135,7 @@ export function GameSettingsSection({ serverId, isRunning }: GameSettingsSection
           onChange={(e) => handleChange('motd', e.target.value)}
           placeholder="A Minecraft Server"
         />
-        <p className="text-xs text-muted-foreground">
-          Message displayed in the server list
-        </p>
+        <p className="text-xs text-muted-foreground">Message displayed in the server list</p>
       </div>
 
       {/* Max Players */}
@@ -159,18 +149,13 @@ export function GameSettingsSection({ serverId, isRunning }: GameSettingsSection
           value={settings['max-players'] || ''}
           onChange={(e) => handleChange('max-players', e.target.value)}
         />
-        <p className="text-xs text-muted-foreground">
-          Maximum number of concurrent players (1-1000)
-        </p>
+        <p className="text-xs text-muted-foreground">Maximum number of concurrent players (1-1000)</p>
       </div>
 
       {/* Difficulty */}
       <div className="space-y-2">
         <Label htmlFor="difficulty">Difficulty</Label>
-        <Select
-          value={settings.difficulty}
-          onValueChange={(value) => handleChange('difficulty', value)}
-        >
+        <Select value={settings.difficulty} onValueChange={(value) => handleChange('difficulty', value)}>
           <SelectTrigger id="difficulty">
             <SelectValue />
           </SelectTrigger>
@@ -187,10 +172,7 @@ export function GameSettingsSection({ serverId, isRunning }: GameSettingsSection
       {/* Gamemode */}
       <div className="space-y-2">
         <Label htmlFor="gamemode">Default Gamemode</Label>
-        <Select
-          value={settings.gamemode}
-          onValueChange={(value) => handleChange('gamemode', value)}
-        >
+        <Select value={settings.gamemode} onValueChange={(value) => handleChange('gamemode', value)}>
           <SelectTrigger id="gamemode">
             <SelectValue />
           </SelectTrigger>
@@ -241,9 +223,7 @@ export function GameSettingsSection({ serverId, isRunning }: GameSettingsSection
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label htmlFor="pvp">PVP Enabled</Label>
-            <p className="text-xs text-muted-foreground">
-              Allow players to damage each other
-            </p>
+            <p className="text-xs text-muted-foreground">Allow players to damage each other</p>
           </div>
           <Switch
             id="pvp"
@@ -255,9 +235,7 @@ export function GameSettingsSection({ serverId, isRunning }: GameSettingsSection
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label htmlFor="hardcore">Hardcore Mode</Label>
-            <p className="text-xs text-muted-foreground">
-              Players are banned on death, difficulty locked to hard
-            </p>
+            <p className="text-xs text-muted-foreground">Players are banned on death, difficulty locked to hard</p>
           </div>
           <Switch
             id="hardcore"
@@ -269,10 +247,7 @@ export function GameSettingsSection({ serverId, isRunning }: GameSettingsSection
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2 pt-4">
-        <Button
-          onClick={handleSave}
-          disabled={!hasChanges || updateProperties.isPending}
-        >
+        <Button onClick={handleSave} disabled={!hasChanges || updateProperties.isPending}>
           {updateProperties.isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />

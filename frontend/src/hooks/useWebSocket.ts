@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useWebSocketStore, type LogEntry, type ServerMetrics, type ServerStatus } from '../stores'
+import { type LogEntry, type ServerMetrics, type ServerStatus, useWebSocketStore } from '../stores'
 
 interface UseWebSocketOptions {
   serverId: string
@@ -11,9 +11,6 @@ interface UseWebSocketOptions {
 
 export function useWebSocket({ serverId, channels, onLog, onMetrics, onStatus }: UseWebSocketOptions) {
   const { isConnected, subscribe, setCallbacks } = useWebSocketStore()
-
-  // Memoize channels string para evitar reconexões desnecessárias
-  const channelsKey = channels.join(',')
 
   useEffect(() => {
     // Define callbacks primeiro
@@ -27,7 +24,7 @@ export function useWebSocket({ serverId, channels, onLog, onMetrics, onStatus }:
     return () => {
       setCallbacks({ onLog: undefined, onMetrics: undefined, onStatus: undefined })
     }
-  }, [serverId, channelsKey, subscribe, setCallbacks, onLog, onMetrics, onStatus])
+  }, [serverId, subscribe, setCallbacks, onLog, onMetrics, onStatus, channels])
 
   return { connected: isConnected }
 }

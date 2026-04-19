@@ -1,18 +1,18 @@
-import { useEffect, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Save, X, Loader2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2, Save, X } from 'lucide-react'
+import { useCallback, useEffect } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 interface FileEditorProps {
-  filePath: string;
-  fileName: string;
-  content: string;
-  sensitive?: boolean;
-  onChange: (content: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-  isModified: boolean;
-  isSaving: boolean;
+  filePath: string
+  fileName: string
+  content: string
+  sensitive?: boolean
+  onChange: (content: string) => void
+  onSave: () => void
+  onClose: () => void
+  isModified: boolean
+  isSaving: boolean
 }
 
 export function FileEditor({
@@ -30,32 +30,32 @@ export function FileEditor({
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
+        e.preventDefault()
         if (isModified && !isSaving) {
-          onSave();
+          onSave()
         }
       }
     },
-    [isModified, isSaving, onSave]
-  );
+    [isModified, isSaving, onSave],
+  )
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isModified) {
-        e.preventDefault();
-        e.returnValue = '';
+        e.preventDefault()
+        e.returnValue = ''
       }
-    };
+    }
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isModified]);
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isModified])
 
   return (
     <div className="h-full flex flex-col">
@@ -77,17 +77,8 @@ export function FileEditor({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={onSave}
-            disabled={!isModified || isSaving}
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
+          <Button variant="default" size="sm" onClick={onSave} disabled={!isModified || isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             Save
           </Button>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -122,5 +113,5 @@ export function FileEditor({
         </span>
       </div>
     </div>
-  );
+  )
 }
