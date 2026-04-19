@@ -5,7 +5,7 @@ import { jwt } from '@elysiajs/jwt'
 import { eq } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
 import * as tar from 'tar'
-import { config } from '../config.js'
+import { config, getServerDir } from '../config.js'
 import { db } from '../db/index.js'
 import { backups, servers } from '../db/schema.js'
 import { AppError, ConflictError, NotFoundError, UnauthorizedError, ValidationError } from '../errors.js'
@@ -277,7 +277,7 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
           throw new AppError('Failed to create safety-net backup before import', 500, 'BACKUP_FAILED')
         }
 
-        const serverDir = server.directory
+        const serverDir = getServerDir(server.id)
         const entries = fs.readdirSync(serverDir)
         for (const entry of entries) {
           fs.rmSync(path.join(serverDir, entry), { recursive: true, force: true })

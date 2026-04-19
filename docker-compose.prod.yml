@@ -25,7 +25,7 @@ services:
       MC_PORT_MIN: ${MC_PORT_MIN:-25565}
       MC_PORT_MAX: ${MC_PORT_MAX:-25575}
     volumes:
-      - backend-data:/app/data
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s

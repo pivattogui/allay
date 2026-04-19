@@ -30,6 +30,9 @@ coverage/
 tmp/
 *.tmp
 
+# Server data
+data/
+
 .omc
 .claude
 CLAUDE.md

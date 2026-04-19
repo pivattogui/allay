@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { desc, eq } from 'drizzle-orm'
 import * as cron from 'node-cron'
-import { config } from '../../config.js'
+import { config, getServerDir } from '../../config.js'
 import { db } from '../../db/index.js'
 import { backupConfigs, backups, events, servers } from '../../db/schema.js'
 import { ConflictError, NotFoundError } from '../../errors.js'
@@ -100,7 +100,7 @@ class BackupManager {
       throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
     }
 
-    const serverDir = server.directory
+    const serverDir = getServerDir(server.id)
     const status = processManager.getStatus(serverId)
     const isRunning = status.state === 'running'
 
@@ -217,7 +217,7 @@ class BackupManager {
       throw new NotFoundError('Backup file not found', 'BACKUP_FILE_NOT_FOUND')
     }
 
-    const serverDir = server.directory
+    const serverDir = getServerDir(server.id)
     const parentDir = path.dirname(serverDir)
     const serverDirName = path.basename(serverDir)
 

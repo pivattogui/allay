@@ -19,7 +19,7 @@ CMD ["bun", "run", "dev"]
 # Builder stage
 FROM base AS builder
 COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile
+RUN bun install
 COPY . .
 RUN bun run build
 
@@ -34,12 +34,11 @@ RUN apt-get update && apt-get install -y wget apt-transport-https gnupg curl unz
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile --production
+RUN bun install --production
 COPY --from=builder /app/dist ./dist
 
 ENV DATA_DIR=/app/data
 ENV NODE_ENV=production
-ENV DATABASE_URL=postgresql://allay:allay@postgres:5432/allay
 EXPOSE 3000
 
 CMD ["bun", "run", "dist/index.js"]

@@ -2,7 +2,7 @@ import { type ChildProcess, execSync, spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import path from 'node:path'
-import { config } from '../../config.js'
+import { config, getServerDir } from '../../config.js'
 import { AppError, ConflictError } from '../../errors.js'
 import { createLogger } from '../../logger.js'
 import type { Server, ServerState, ServerStatus } from '../../types/index.js'
@@ -35,7 +35,7 @@ class ProcessManager extends EventEmitter {
     }
 
     // Clean up stale session.lock files
-    this.cleanupStaleLocks(server.directory)
+    this.cleanupStaleLocks(getServerDir(server.id))
 
     // Build JVM arguments
     const javaArgs = [`-Xms${server.ramMinMb}M`, `-Xmx${server.ramMaxMb}M`]
@@ -62,12 +62,30 @@ class ProcessManager extends EventEmitter {
       }
     }
 
+    if (!fs.existsSync(getServerDir(server.id))) {
+      throw new AppError(`Server directory not found: ${getServerDir(server.id)}`, 500, 'SERVER_DIR_NOT_FOUND')
+    }
+
+    if (!fs.existsSync(path.join(getServerDir(server.id), 'server.jar'))) {
+      throw new AppError('server.jar not found in server directory', 500, 'SERVER_JAR_NOT_FOUND')
+    }
+
     log.info({ serverId: server.id, javaCommand, javaArgs }, 'Spawning server process')
 
-    const proc = spawn(javaCommand, javaArgs, {
-      cwd: server.directory,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
+    let proc: ReturnType<typeof spawn>
+    try {
+      proc = spawn(javaCommand, javaArgs, {
+        cwd: getServerDir(server.id),
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    } catch (err) {
+      log.error({ serverId: server.id, javaCommand, err }, 'Failed to spawn server process')
+      throw new AppError(
+        `Failed to start server: ${err instanceof Error ? err.message : String(err)}`,
+        500,
+        'PROCESS_START_FAILED',
+      )
+    }
 
     if (!proc.pid) {
       throw new AppError('Failed to start server process', 500, 'PROCESS_START_FAILED')

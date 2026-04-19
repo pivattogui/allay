@@ -5,7 +5,7 @@ import { and, desc, eq, ne } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
 import sharp from 'sharp'
 import { v4 as uuidv4 } from 'uuid'
-import { config } from '../config.js'
+import { config, getServerDir } from '../config.js'
 import { db } from '../db/index.js'
 import { backupConfigs, events, servers } from '../db/schema.js'
 import { AppError, ConflictError, NotFoundError, UnauthorizedError, ValidationError } from '../errors.js'
@@ -242,7 +242,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
           throw new ConflictError('Port already in use by another server', 'PORT_IN_USE')
         }
 
-        const propsPath = path.join(server.directory, 'server.properties')
+        const propsPath = path.join(getServerDir(server.id), 'server.properties')
         if (fs.existsSync(propsPath)) {
           let props = fs.readFileSync(propsPath, 'utf-8')
           props = props.replace(/server-port=\d+/, `server-port=${input.port}`)
@@ -302,8 +302,8 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         await processManager.stop(server.id)
       }
 
-      if (fs.existsSync(server.directory)) {
-        fs.rmSync(server.directory, { recursive: true, force: true })
+      if (fs.existsSync(getServerDir(server.id))) {
+        fs.rmSync(getServerDir(server.id), { recursive: true, force: true })
       }
 
       await db.delete(servers).where(eq(servers.id, id))
@@ -540,7 +540,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
       }
 
-      const propsPath = path.join(server.directory, 'server.properties')
+      const propsPath = path.join(getServerDir(server.id), 'server.properties')
       if (!fs.existsSync(propsPath)) {
         return { properties: {} }
       }
@@ -591,7 +591,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       const content = Object.entries(properties)
         .map(([key, value]) => `${key}=${value}`)
         .join('\n')
-      const propsPath = path.join(server.directory, 'server.properties')
+      const propsPath = path.join(getServerDir(server.id), 'server.properties')
       fs.writeFileSync(propsPath, content)
 
       if (properties['server-port']) {
@@ -637,7 +637,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
       }
 
-      const propsPath = path.join(server.directory, 'server.properties')
+      const propsPath = path.join(getServerDir(server.id), 'server.properties')
       if (!fs.existsSync(propsPath)) {
         throw new NotFoundError('server.properties not found', 'PROPERTIES_NOT_FOUND')
       }
@@ -676,7 +676,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
       const status = processManager.getStatus(server.id)
       const needsRestart = status.state === 'running'
 
-      const propsPath = path.join(server.directory, 'server.properties')
+      const propsPath = path.join(getServerDir(server.id), 'server.properties')
       fs.writeFileSync(propsPath, content)
 
       const portMatch = content.match(/server-port=(\d+)/)
@@ -877,7 +877,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
 
       try {
         const processed = await sharp(buffer).resize(64, 64, { fit: 'cover' }).png().toBuffer()
-        const iconPath = path.join(server.directory, 'server-icon.png')
+        const iconPath = path.join(getServerDir(server.id), 'server-icon.png')
         fs.writeFileSync(iconPath, processed)
       } catch (_err) {
         throw new AppError('Failed to process image', 500, 'IMAGE_PROCESSING_FAILED')
@@ -913,7 +913,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         throw new NotFoundError('Icon not found', 'ICON_NOT_FOUND')
       }
 
-      const iconPath = path.join(server.directory, 'server-icon.png')
+      const iconPath = path.join(getServerDir(server.id), 'server-icon.png')
       if (!fs.existsSync(iconPath)) {
         throw new NotFoundError('Icon not found', 'ICON_NOT_FOUND')
       }
@@ -944,7 +944,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
       }
 
-      const iconPath = path.join(server.directory, 'server-icon.png')
+      const iconPath = path.join(getServerDir(server.id), 'server-icon.png')
       if (fs.existsSync(iconPath)) {
         fs.unlinkSync(iconPath)
       }
@@ -1003,7 +1003,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
 
       try {
         const jarPath = await jarManager.download(type as 'vanilla' | 'paper', version)
-        const serverJarPath = path.join(server.directory, 'server.jar')
+        const serverJarPath = path.join(getServerDir(server.id), 'server.jar')
         if (fs.existsSync(serverJarPath)) {
           fs.unlinkSync(serverJarPath)
         }
