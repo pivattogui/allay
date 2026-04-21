@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { ImportAnalysis, ImportSelection } from '@/hooks/useImport'
@@ -12,11 +12,12 @@ interface ImportDialogProps {
   serverId: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  initialFile?: File | null
 }
 
 type FlowState = 'upload' | 'analyzing' | 'review' | 'manual' | 'importing' | 'done'
 
-export function ImportDialog({ serverId, open, onOpenChange }: ImportDialogProps) {
+export function ImportDialog({ serverId, open, onOpenChange, initialFile }: ImportDialogProps) {
   const [state, setState] = useState<FlowState>('upload')
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [analysis, setAnalysis] = useState<ImportAnalysis | null>(null)
@@ -58,6 +59,18 @@ export function ImportDialog({ serverId, open, onOpenChange }: ImportDialogProps
     },
     [analyzeMutation, reset],
   )
+
+  // Auto-trigger analysis when opened with a pre-selected file
+  const processedFileRef = useRef<File | null>(null)
+  useEffect(() => {
+    if (open && initialFile && initialFile !== processedFileRef.current) {
+      processedFileRef.current = initialFile
+      handleFileSelected(initialFile)
+    }
+    if (!open) {
+      processedFileRef.current = null
+    }
+  }, [open, initialFile, handleFileSelected])
 
   const handleExecute = useCallback(
     async (selection: ImportSelection) => {
