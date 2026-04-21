@@ -65,3 +65,47 @@ export const BackupIdParams = t.Object({
   serverId: t.String({ description: 'Server UUID' }),
   backupId: t.String({ description: 'Backup UUID' }),
 })
+
+// Import analysis response
+export const ImportAnalyzeResponse = t.Object({
+  importId: t.String({ description: 'Temporary import session ID' }),
+  detectedType: t.Union([t.Literal('world-only'), t.Literal('full-backup'), t.Literal('mixed')], {
+    description: 'Detected archive type',
+  }),
+  categories: t.Object({
+    world: t.Array(t.String()),
+    configs: t.Array(t.String()),
+    plugins: t.Array(t.String()),
+    jars: t.Array(t.String()),
+    logs: t.Array(t.String()),
+    other: t.Array(t.String()),
+  }),
+  suggestedPreset: t.Union([
+    t.Literal('world-only'),
+    t.Literal('world-configs'),
+    t.Literal('all-except-jars'),
+    t.Null(),
+  ], { description: 'Recommended preset' }),
+  totalSize: t.Number({ description: 'Archive total size in bytes' }),
+})
+
+// Import execute request
+export const ImportExecuteBody = t.Object({
+  selection: t.Object({
+    preset: t.Union([
+      t.Literal('world-only'),
+      t.Literal('world-configs'),
+      t.Literal('all-except-jars'),
+      t.Null(),
+    ]),
+    include: t.Array(t.String()),
+    exclude: t.Array(t.String()),
+  }),
+})
+
+// Import execute response
+export const ImportExecuteResponse = t.Object({
+  message: t.String(),
+  backupId: t.String({ description: 'Pre-import backup ID' }),
+  importedPaths: t.Number({ description: 'Number of paths imported' }),
+})
