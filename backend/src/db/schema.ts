@@ -50,7 +50,7 @@ export const backups = pgTable(
       .references(() => servers.id, { onDelete: 'cascade' }),
     filename: text('filename').notNull(),
     sizeBytes: integer('size_bytes').notNull().default(0),
-    type: text('type', { enum: ['manual', 'scheduled'] }).notNull(),
+    type: text('type', { enum: ['manual', 'scheduled', 'pre-import'] }).notNull(),
     status: text('status', { enum: ['pending', 'completed', 'failed'] })
       .notNull()
       .default('completed'),

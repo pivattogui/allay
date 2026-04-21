@@ -6,7 +6,7 @@ export const Backup = t.Object({
   serverId: t.String({ description: 'Server UUID' }),
   filename: t.String({ description: 'Backup filename' }),
   sizeBytes: t.Number({ description: 'Backup size in bytes' }),
-  type: t.Union([t.Literal('manual'), t.Literal('scheduled')], { description: 'Backup type' }),
+  type: t.Union([t.Literal('manual'), t.Literal('scheduled'), t.Literal('pre-import')], { description: 'Backup type' }),
   createdAt: t.String({ description: 'Creation timestamp' }),
 })
 

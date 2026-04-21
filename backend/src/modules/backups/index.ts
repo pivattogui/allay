@@ -26,7 +26,7 @@ export interface BackupRecord {
   serverId: string
   filename: string
   sizeBytes: number
-  type: 'manual' | 'scheduled'
+  type: 'manual' | 'scheduled' | 'pre-import'
   status: 'pending' | 'completed' | 'failed'
   createdAt: string
 }
@@ -94,7 +94,7 @@ class BackupManager {
     }
   }
 
-  async createBackup(serverId: string, type: 'manual' | 'scheduled' = 'manual'): Promise<BackupRecord> {
+  async createBackup(serverId: string, type: 'manual' | 'scheduled' | 'pre-import' = 'manual'): Promise<BackupRecord> {
     const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1)
     if (!server) {
       throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
