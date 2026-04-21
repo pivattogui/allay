@@ -34,7 +34,7 @@ export interface Backup {
   id: string
   filename: string
   sizeBytes: number
-  type: 'manual' | 'scheduled'
+  type: 'manual' | 'scheduled' | 'pre-import'
   status: 'pending' | 'completed' | 'failed'
   createdAt: string
 }
