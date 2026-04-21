@@ -1,4 +1,4 @@
-import { Archive, Download, Loader2, MoreVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Archive, Download, FileArchive, Loader2, MoreVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -16,6 +16,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '@/hooks/useBackups'
 import { useAuthStore } from '@/stores'
+import { ImportDialog } from './ImportDialog'
 
 interface BackupListProps {
   serverId: string
@@ -41,6 +42,7 @@ export function BackupList({ serverId }: BackupListProps) {
   const restoreBackupMutation = useRestoreBackup(serverId)
   const deleteBackupMutation = useDeleteBackup(serverId)
 
+  const [importOpen, setImportOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<{
     type: 'restore' | 'delete'
@@ -145,19 +147,25 @@ export function BackupList({ serverId }: BackupListProps) {
               {backups.length} backup{backups.length !== 1 ? 's' : ''} available
             </p>
           </div>
-          <Button onClick={handleCreateBackup} disabled={createBackupMutation.isPending}>
-            {createBackupMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Backup
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <FileArchive className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <Button onClick={handleCreateBackup} disabled={createBackupMutation.isPending}>
+              {createBackupMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Backup
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* Backup List */}
@@ -251,6 +259,8 @@ export function BackupList({ serverId }: BackupListProps) {
           </div>
         )}
       </div>
+
+      <ImportDialog serverId={serverId} open={importOpen} onOpenChange={setImportOpen} />
 
       <ConfirmDialog
         open={!!confirmAction}
