@@ -1,7 +1,8 @@
-import { Loader2 } from 'lucide-react'
+import { FileArchive, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
 import type { ImportAnalysis, ImportSelection } from '@/hooks/useImport'
 import { useAnalyzeImport, useExecuteImport } from '@/hooks/useImport'
 import { ImportDropZone } from './ImportDropZone'
@@ -20,6 +21,7 @@ type FlowState = 'upload' | 'analyzing' | 'review' | 'manual' | 'importing' | 'd
 export function ImportDialog({ serverId, open, onOpenChange, initialFile }: ImportDialogProps) {
   const [state, setState] = useState<FlowState>('upload')
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<ImportAnalysis | null>(null)
 
   const analyzeMutation = useAnalyzeImport(serverId)
@@ -28,6 +30,7 @@ export function ImportDialog({ serverId, open, onOpenChange, initialFile }: Impo
   const reset = useCallback(() => {
     setState('upload')
     setUploadProgress(null)
+    setUploadFileName(null)
     setAnalysis(null)
   }, [])
 
@@ -42,6 +45,7 @@ export function ImportDialog({ serverId, open, onOpenChange, initialFile }: Impo
   const handleFileSelected = useCallback(
     async (file: File) => {
       setState('analyzing')
+      setUploadFileName(file.name)
       setUploadProgress(0)
       try {
         const result = await analyzeMutation.mutateAsync({
@@ -111,12 +115,19 @@ export function ImportDialog({ serverId, open, onOpenChange, initialFile }: Impo
           </DialogDescription>
         </DialogHeader>
 
-        {(state === 'upload' || state === 'analyzing') && (
-          <ImportDropZone
-            onFileSelected={handleFileSelected}
-            uploadProgress={uploadProgress}
-            disabled={state === 'analyzing'}
-          />
+        {state === 'upload' && <ImportDropZone onFileSelected={handleFileSelected} uploadProgress={null} />}
+
+        {state === 'analyzing' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-lg border p-4">
+              <FileArchive className="h-5 w-5 text-muted-foreground shrink-0" />
+              <p className="text-sm font-medium truncate">{uploadFileName}</p>
+            </div>
+            <Progress value={uploadProgress ?? 0} className="h-2" />
+            <p className="text-xs text-muted-foreground text-center">
+              {(uploadProgress ?? 0) < 100 ? `Uploading... ${uploadProgress ?? 0}%` : 'Analyzing contents...'}
+            </p>
+          </div>
         )}
 
         {state === 'review' && analysis && (
