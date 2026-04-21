@@ -1,6 +1,7 @@
-import { FolderOpen, FolderPlus, RefreshCw, Upload } from 'lucide-react'
+import { FileArchive, FolderOpen, FolderPlus, RefreshCw, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { ImportDialog } from '@/components/backups/ImportDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -37,6 +38,7 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [newFolderName, setNewFolderName] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null)
   const [discardCallback, setDiscardCallback] = useState<(() => void) | null>(null)
 
@@ -320,6 +322,10 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
             <Upload className="h-4 w-4 mr-2" />
             Upload
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+            <FileArchive className="h-4 w-4 mr-2" />
+            Import
+          </Button>
         </div>
       </div>
 
@@ -396,6 +402,9 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
         onOpenChange={setUploadOpen}
         onUploadComplete={() => fetchEntries(currentPath)}
       />
+
+      {/* Import Dialog */}
+      <ImportDialog serverId={serverId} open={importOpen} onOpenChange={setImportOpen} />
 
       {/* Delete Confirmation */}
       <ConfirmDialog
