@@ -7,14 +7,14 @@ import * as tar from 'tar'
 import { config } from '../../config.js'
 import { createLogger } from '../../logger.js'
 import {
+  type ArchiveCategories,
   CONFIG_EXTENSIONS,
   CONFIG_PATTERNS,
+  type DetectedType,
   LOG_PATTERNS,
   PLUGIN_PATTERN,
-  WORLD_PATTERNS,
-  type ArchiveCategories,
-  type DetectedType,
   type PresetName,
+  WORLD_PATTERNS,
 } from './types.js'
 
 const log = createLogger('import-analyzer')

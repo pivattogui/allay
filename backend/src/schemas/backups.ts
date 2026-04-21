@@ -80,24 +80,17 @@ export const ImportAnalyzeResponse = t.Object({
     logs: t.Array(t.String()),
     other: t.Array(t.String()),
   }),
-  suggestedPreset: t.Union([
-    t.Literal('world-only'),
-    t.Literal('world-configs'),
-    t.Literal('all-except-jars'),
-    t.Null(),
-  ], { description: 'Recommended preset' }),
+  suggestedPreset: t.Union(
+    [t.Literal('world-only'), t.Literal('world-configs'), t.Literal('all-except-jars'), t.Null()],
+    { description: 'Recommended preset' },
+  ),
   totalSize: t.Number({ description: 'Archive total size in bytes' }),
 })
 
 // Import execute request
 export const ImportExecuteBody = t.Object({
   selection: t.Object({
-    preset: t.Union([
-      t.Literal('world-only'),
-      t.Literal('world-configs'),
-      t.Literal('all-except-jars'),
-      t.Null(),
-    ]),
+    preset: t.Union([t.Literal('world-only'), t.Literal('world-configs'), t.Literal('all-except-jars'), t.Null()]),
     include: t.Array(t.String()),
     exclude: t.Array(t.String()),
   }),

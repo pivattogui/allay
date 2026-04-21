@@ -8,10 +8,22 @@ import { db } from '../db/index.js'
 import { backups, servers } from '../db/schema.js'
 import { AppError, ConflictError, NotFoundError, UnauthorizedError, ValidationError } from '../errors.js'
 import { backupManager } from '../modules/backups/index.js'
-import { processManager } from '../modules/process/index.js'
-import { analyzeArchive, cleanExpiredImports, cleanImport, getImportPath, saveUploadedFile } from '../modules/import/analyzer.js'
+import {
+  analyzeArchive,
+  cleanExpiredImports,
+  cleanImport,
+  getImportPath,
+  saveUploadedFile,
+} from '../modules/import/analyzer.js'
 import { extractSelection, resolveSelection } from '../modules/import/extractor.js'
-import { CreateBackupResponse, ImportAnalyzeResponse, ImportExecuteBody, ImportExecuteResponse, UpdateBackupConfigBody } from '../schemas/backups.js'
+import { processManager } from '../modules/process/index.js'
+import {
+  CreateBackupResponse,
+  ImportAnalyzeResponse,
+  ImportExecuteBody,
+  ImportExecuteResponse,
+  UpdateBackupConfigBody,
+} from '../schemas/backups.js'
 import { ErrorResponse, MessageResponse } from '../schemas/common.js'
 import type { JwtPayload } from '../types/index.js'
 
@@ -315,9 +327,7 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
       }
 
       const serverDir = getServerDir(serverId)
-      const worldDirsToReplace = categories.world.filter((w) =>
-        selectedPaths.some((p) => p.startsWith(w)),
-      )
+      const worldDirsToReplace = categories.world.filter((w) => selectedPaths.some((p) => p.startsWith(w)))
       for (const worldDir of worldDirsToReplace) {
         const fullPath = path.join(serverDir, worldDir)
         if (fs.existsSync(fullPath)) {
@@ -344,7 +354,8 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
       response: ImportExecuteResponse,
       detail: {
         summary: 'Execute import',
-        description: 'Execute a previously analyzed import with the given selection. Creates a pre-import backup of the current world before proceeding.',
+        description:
+          'Execute a previously analyzed import with the given selection. Creates a pre-import backup of the current world before proceeding.',
         security: [{ bearerAuth: [] }],
       },
     },
