@@ -44,6 +44,7 @@ const envSchema = z.object({
   MC_PORT_MIN: z.coerce.number().int().min(1024).max(65535).default(25565),
   MC_PORT_MAX: z.coerce.number().int().min(1024).max(65535).default(25575),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  ALLAY_PUBLIC_ORIGIN: z.string().url().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -63,6 +64,7 @@ export const config = {
   port: env.PORT,
   logLevel: env.LOG_LEVEL,
   databaseUrl: env.DATABASE_URL,
+  publicOrigin: env.ALLAY_PUBLIC_ORIGIN,
 
   paths: {
     data: path.resolve(env.DATA_DIR),
