@@ -173,6 +173,7 @@ class BackupManager {
       }
     } catch (err) {
       log.error({ serverId, backupId, err }, 'Backup failed')
+      fs.rmSync(backupPath, { force: true })
       await db.update(backups).set({ status: 'failed' }).where(eq(backups.id, backupId))
       throw err
     } finally {
