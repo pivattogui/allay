@@ -56,7 +56,7 @@ export function buildApp() {
     )
     .use(
       cors({
-        origin: config.isDev ? true : ['http://localhost:8080'],
+        origin: config.isDev ? true : config.publicOrigin ? [config.publicOrigin] : false,
         credentials: true,
       }),
     )

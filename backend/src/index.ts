@@ -25,6 +25,7 @@ app.listen({
 })
 
 log.info({ port: config.port, env: config.env }, 'Server listening')
+log.info({ publicOrigin: config.publicOrigin ?? '<same-origin only>' }, 'CORS configured')
 
 const shutdown = async (signal: string) => {
   log.info({ signal }, 'Shutting down')
