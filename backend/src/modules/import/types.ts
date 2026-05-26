@@ -24,11 +24,33 @@ export interface ImportSelection {
   exclude: string[]
 }
 
-// Patterns for categorization
 export const WORLD_PATTERNS = ['world/', 'world_nether/', 'world_the_end/']
-export const WORLD_MARKERS = ['level.dat']
-export const NETHER_MARKERS = ['DIM-1/']
-export const END_MARKERS = ['DIM1/']
+
+// Root-level entries that belong to a Minecraft world when there is no `world/`
+// wrapper directory (e.g. archives exported directly from `world/`).
+export const WORLD_COMPONENT_FILES = [
+  'level.dat',
+  'level.dat_old',
+  'session.lock',
+  'raids.dat',
+  'scoreboard.dat',
+  'forcedchunks.dat',
+  'icon.png',
+]
+
+export const WORLD_COMPONENT_DIRS = [
+  'region/',
+  'entities/',
+  'poi/',
+  'data/',
+  'playerdata/',
+  'advancements/',
+  'stats/',
+  'datapacks/',
+  'serverconfig/',
+  'DIM-1/',
+  'DIM1/',
+]
 
 export const CONFIG_PATTERNS = [
   'server.properties',

@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import * as tar from 'tar'
@@ -11,19 +10,11 @@ import type { ArchiveCategories, ImportSelection, PresetName } from './types.js'
 const log = createLogger('import-extractor')
 const execFileAsync = promisify(execFile)
 
-// ---------------------------------------------------------------------------
-// Preset → category key mapping
-// ---------------------------------------------------------------------------
-
 const PRESET_CATEGORIES: Record<PresetName, Array<keyof ArchiveCategories>> = {
   'world-only': ['world'],
   'world-configs': ['world', 'configs'],
   'all-except-jars': ['world', 'configs', 'plugins', 'other'],
 }
-
-// ---------------------------------------------------------------------------
-// resolveSelection
-// ---------------------------------------------------------------------------
 
 /**
  * Resolves a selection (preset or manual include list) into actual file paths
@@ -39,8 +30,9 @@ export function resolveSelection(
   allEntries: string[],
 ): string[] {
   const includePrefixes = buildIncludePrefixes(selection, categories)
-  const included = allEntries.filter((entry) => matchesAnyPrefix(entry, includePrefixes))
-  return applyExcludes(included, selection.exclude)
+  return allEntries.filter(
+    (entry) => matchesAnyPrefix(entry, includePrefixes) && !matchesAnyPrefix(entry, selection.exclude),
+  )
 }
 
 function buildIncludePrefixes(selection: ImportSelection, categories: ArchiveCategories): string[] {
@@ -57,15 +49,6 @@ function matchesAnyPrefix(entry: string, prefixes: string[]): boolean {
     return entry === prefix
   })
 }
-
-function applyExcludes(entries: string[], excludes: string[]): string[] {
-  if (excludes.length === 0) return entries
-  return entries.filter((entry) => !matchesAnyPrefix(entry, excludes))
-}
-
-// ---------------------------------------------------------------------------
-// extractSelection
-// ---------------------------------------------------------------------------
 
 /**
  * Extracts only the selected paths from an archive into the server directory.
@@ -98,10 +81,6 @@ export async function extractSelection(
   log.info({ serverId }, 'Extraction complete')
 }
 
-// ---------------------------------------------------------------------------
-// Tar extraction
-// ---------------------------------------------------------------------------
-
 async function extractTarSelection(
   archivePath: string,
   serverDir: string,
@@ -133,17 +112,13 @@ async function extractTarSelection(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Zip extraction
-// ---------------------------------------------------------------------------
-
 async function extractZipSelection(
   archivePath: string,
   serverDir: string,
   selectedSet: Set<string>,
   needsWorldWrap: boolean,
 ): Promise<void> {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zip-extract-'))
+  const tempDir = fs.mkdtempSync(path.join(config.paths.temp, 'zip-extract-'))
 
   try {
     await execFileAsync('unzip', ['-q', archivePath, '-d', tempDir])
@@ -181,10 +156,6 @@ function resolveZipSourceDir(tempDir: string): string {
   }
   return tempDir
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function validateNoPathTraversal(resolvedPath: string, baseDir: string): void {
   const normalizedBase = path.resolve(baseDir)

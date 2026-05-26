@@ -143,15 +143,6 @@ export interface BackupConfig {
   createdAt: string
 }
 
-export interface Backup {
-  id: string
-  serverId: string
-  filename: string
-  sizeBytes: number
-  type: 'manual' | 'scheduled'
-  createdAt: string
-}
-
 // Metrics
 export interface ServerMetrics {
   timestamp: string

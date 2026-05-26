@@ -1,6 +1,6 @@
 import { FileArchive, Globe, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ImportAnalysis } from '@/hooks/useImport'
+import type { ImportAnalysis } from '@/lib/api'
 
 interface ImportSuggestionProps {
   analysis: ImportAnalysis
@@ -14,8 +14,10 @@ const TYPE_CONFIG = {
     icon: Globe,
     title: 'Minecraft world detected',
     getDescription: (a: ImportAnalysis) => {
-      const worlds = a.categories.world.map((w) => w.replace(/\/$/, '')).join(', ')
-      return `Contains world data: ${worlds}`
+      const names = a.categories.world.map((w) => w.replace(/\/$/, ''))
+      const head = names.slice(0, 3).join(', ')
+      const rest = names.length - 3
+      return `Contains world data: ${head}${rest > 0 ? `, +${rest} more` : ''}`
     },
   },
   'full-backup': {

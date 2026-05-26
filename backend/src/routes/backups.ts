@@ -7,6 +7,7 @@ import { config, getServerDir } from '../config.js'
 import { db } from '../db/index.js'
 import { backups, servers } from '../db/schema.js'
 import { AppError, ConflictError, NotFoundError, UnauthorizedError, ValidationError } from '../errors.js'
+import { createLogger } from '../logger.js'
 import { backupManager } from '../modules/backups/index.js'
 import {
   analyzeArchive,
@@ -26,6 +27,8 @@ import {
 } from '../schemas/backups.js'
 import { ErrorResponse, MessageResponse } from '../schemas/common.js'
 import type { JwtPayload } from '../types/index.js'
+
+const log = createLogger('backups-route')
 
 export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags: ['backups'] } })
   .use(jwt({ name: 'jwt', secret: config.jwt.secret, exp: config.jwt.expiresIn }))
@@ -326,23 +329,33 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
         throw new AppError('Failed to create pre-import backup', 500, 'BACKUP_FAILED')
       }
 
-      const serverDir = getServerDir(serverId)
-      const worldDirsToReplace = categories.world.filter((w) => selectedPaths.some((p) => p.startsWith(w)))
-      for (const worldDir of worldDirsToReplace) {
-        const fullPath = path.join(serverDir, worldDir)
-        if (fs.existsSync(fullPath)) {
-          fs.rmSync(fullPath, { recursive: true, force: true })
+      try {
+        const serverDir = getServerDir(serverId)
+        const worldDirsToReplace = categories.world.filter((w) => selectedPaths.some((p) => p.startsWith(w)))
+        for (const worldDir of worldDirsToReplace) {
+          const fullPath = path.join(serverDir, worldDir)
+          if (fs.existsSync(fullPath)) {
+            fs.rmSync(fullPath, { recursive: true, force: true })
+          }
         }
-      }
 
-      await extractSelection(archivePath, serverId, selectedPaths, entries)
+        await extractSelection(archivePath, serverId, selectedPaths, entries)
 
-      cleanImport(importId)
-
-      return {
-        message: 'Import completed successfully',
-        backupId,
-        importedPaths: selectedPaths.length,
+        return {
+          message: 'Import completed successfully',
+          backupId,
+          importedPaths: selectedPaths.length,
+        }
+      } catch (err) {
+        // Restore the pre-import backup so the server isn't left half-extracted.
+        try {
+          await backupManager.restoreBackup(backupId)
+        } catch (restoreErr) {
+          log.error({ serverId, backupId, err: restoreErr }, 'Pre-import rollback failed')
+        }
+        throw err
+      } finally {
+        cleanImport(importId)
       }
     },
     {

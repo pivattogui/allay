@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
-import type { ImportAnalysis, ImportSelection } from '@/hooks/useImport'
 import { useAnalyzeImport, useExecuteImport } from '@/hooks/useImport'
+import type { ImportAnalysis, ImportSelection } from '@/lib/api'
 import { ImportDropZone } from './ImportDropZone'
 import { ImportManualSelection } from './ImportManualSelection'
 import { ImportSuggestion } from './ImportSuggestion'
@@ -16,7 +16,7 @@ interface ImportDialogProps {
   initialFile?: File | null
 }
 
-type FlowState = 'upload' | 'analyzing' | 'review' | 'manual' | 'importing' | 'done'
+type FlowState = 'upload' | 'analyzing' | 'review' | 'manual' | 'importing'
 
 export function ImportDialog({ serverId, open, onOpenChange, initialFile }: ImportDialogProps) {
   const [state, setState] = useState<FlowState>('upload')
@@ -85,7 +85,6 @@ export function ImportDialog({ serverId, open, onOpenChange, initialFile }: Impo
           importId: analysis.importId,
           selection,
         })
-        setState('done')
         toast.success('Import completed — pre-import backup created')
         handleOpenChange(false)
       } catch (err) {

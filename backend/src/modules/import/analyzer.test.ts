@@ -41,6 +41,49 @@ describe('categorizeEntries', () => {
     const result = categorizeEntries(entries)
     expect(result.other).toEqual(['whitelist.json', 'ops.json', 'banned-players.json'])
   })
+
+  it('handles a bare world layout (level.dat at root, no world/ wrapper)', () => {
+    const entries = [
+      'level.dat',
+      'level.dat_old',
+      'session.lock',
+      'icon.png',
+      'region/r.0.0.mca',
+      'entities/r.0.0.mca',
+      'data/raids.dat',
+      'playerdata/abc.dat',
+      'DIM-1/region/r.0.0.mca',
+      'DIM1/region/r.0.0.mca',
+      'spsSettings.json',
+    ]
+    const result = categorizeEntries(entries)
+
+    // World prefixes are real, not the virtual 'world/' marker
+    expect(result.world).not.toContain('world/')
+    expect(result.world).toEqual(
+      expect.arrayContaining([
+        'level.dat',
+        'level.dat_old',
+        'session.lock',
+        'icon.png',
+        'region/',
+        'entities/',
+        'data/',
+        'playerdata/',
+        'DIM-1/',
+        'DIM1/',
+      ]),
+    )
+
+    // Files that match real world component prefixes do not leak into other
+    expect(result.other).toEqual(['spsSettings.json'])
+  })
+
+  it('uses world/ prefix when a wrapper directory is present', () => {
+    const entries = ['world/level.dat', 'world/region/r.0.0.mca']
+    const result = categorizeEntries(entries)
+    expect(result.world).toEqual(['world/'])
+  })
 })
 
 describe('classifyArchive', () => {

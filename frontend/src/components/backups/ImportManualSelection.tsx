@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import type { ImportAnalysis, ImportSelection } from '@/hooks/useImport'
+import type { ImportAnalysis, ImportSelection } from '@/lib/api'
 
 interface ImportManualSelectionProps {
   analysis: ImportAnalysis
@@ -90,13 +90,7 @@ export function ImportManualSelection({ analysis, onConfirm, onBack, loading }: 
   }, [])
 
   const handleConfirm = useCallback(() => {
-    const include = [...selectedCategories].flatMap((cat) => {
-      if (cat === 'world') return analysis.categories.world
-      if (cat === 'plugins') return ['plugins/']
-      if (cat === 'logs') return ['logs/', 'crash-reports/']
-      return analysis.categories[cat]
-    })
-
+    const include = [...selectedCategories].flatMap((cat) => analysis.categories[cat])
     onConfirm({ preset: null, include, exclude: [] })
   }, [selectedCategories, analysis.categories, onConfirm])
 

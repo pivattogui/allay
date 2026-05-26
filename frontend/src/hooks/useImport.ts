@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { ImportAnalysis, ImportSelection } from '../lib/api'
+import type { ImportSelection } from '../lib/api'
 import { analyzeImport, executeImport } from '../lib/api'
 import { serverKeys } from '../lib/queryKeys'
 
@@ -21,5 +21,3 @@ export function useExecuteImport(serverId: string) {
     },
   })
 }
-
-export type { ImportAnalysis, ImportSelection }

@@ -14,6 +14,8 @@ import {
   LOG_PATTERNS,
   PLUGIN_PATTERN,
   type PresetName,
+  WORLD_COMPONENT_DIRS,
+  WORLD_COMPONENT_FILES,
   WORLD_PATTERNS,
 } from './types.js'
 
@@ -22,10 +24,6 @@ const execFileAsync = promisify(execFile)
 
 const IMPORT_PREFIX = 'import-'
 const IMPORT_TTL_MS = 30 * 60 * 1000 // 30 minutes
-
-// ---------------------------------------------------------------------------
-// Entry listing
-// ---------------------------------------------------------------------------
 
 async function listTarEntries(archivePath: string): Promise<string[]> {
   const entries: string[] = []
@@ -62,10 +60,6 @@ async function listArchiveEntries(archivePath: string): Promise<string[]> {
   return listTarEntries(archivePath)
 }
 
-// ---------------------------------------------------------------------------
-// Path normalization
-// ---------------------------------------------------------------------------
-
 /**
  * If every entry shares a single root directory component, strip it.
  * This handles archives exported as `server-backup/world/...` etc.
@@ -94,14 +88,44 @@ function normalizeEntries(raw: string[]): string[] {
   return stripSingleRootDir(stripMacOsxArtifacts(raw))
 }
 
-// ---------------------------------------------------------------------------
-// Categorization
-// ---------------------------------------------------------------------------
-
 function isRootLevel(entry: string): boolean {
   // Root-level: no path separator, or ends with "/" (directory marker at root)
   const withoutTrailing = entry.endsWith('/') ? entry.slice(0, -1) : entry
   return !withoutTrailing.includes('/')
+}
+
+/**
+ * Detects a "bare world" layout — archives exported directly from a `world/`
+ * directory, so `level.dat` and friends live at the root with no wrapper.
+ *
+ * Returns the set of REAL prefixes (files and directories at the root) that
+ * compose the world. Empty set when the archive is not bare-world.
+ *
+ * Returning real prefixes lets `resolveSelection` filter the actual archive
+ * entries; using a virtual `world/` prefix would match nothing.
+ */
+function detectBareWorldPrefixes(entries: string[]): Set<string> {
+  if (!entries.some((e) => e === 'level.dat')) return new Set()
+
+  const prefixes = new Set<string>()
+  for (const entry of entries) {
+    if (WORLD_COMPONENT_FILES.includes(entry)) {
+      prefixes.add(entry)
+      continue
+    }
+    const dir = WORLD_COMPONENT_DIRS.find((d) => entry.startsWith(d))
+    if (dir) prefixes.add(dir)
+  }
+  return prefixes
+}
+
+function isClaimedByBareWorld(entry: string, prefixes: Set<string>): boolean {
+  if (prefixes.size === 0) return false
+  if (prefixes.has(entry)) return true
+  for (const prefix of prefixes) {
+    if (prefix.endsWith('/') && entry.startsWith(prefix)) return true
+  }
+  return false
 }
 
 export function categorizeEntries(entries: string[]): ArchiveCategories {
@@ -115,22 +139,21 @@ export function categorizeEntries(entries: string[]): ArchiveCategories {
   // Track which world directory prefixes we've seen to deduplicate
   const seenWorldDirs = new Set<string>()
 
+  // Pre-scan for a bare-world layout. The prefixes collected here are matched
+  // against real entries; the loop below skips claimed entries so they do not
+  // leak into other categories.
+  const bareWorldPrefixes = detectBareWorldPrefixes(entries)
+  for (const prefix of bareWorldPrefixes) worldSet.add(prefix)
+
   for (const entry of entries) {
+    if (isClaimedByBareWorld(entry, bareWorldPrefixes)) continue
+
     // World patterns — collect directory prefix, not individual files
     const worldPattern = WORLD_PATTERNS.find((p) => entry.startsWith(p))
     if (worldPattern) {
       if (!seenWorldDirs.has(worldPattern)) {
         seenWorldDirs.add(worldPattern)
         worldSet.add(worldPattern)
-      }
-      continue
-    }
-
-    // Bare level.dat at root means there's an implicit world/ here
-    if (entry === 'level.dat') {
-      if (!seenWorldDirs.has('world/')) {
-        seenWorldDirs.add('world/')
-        worldSet.add('world/')
       }
       continue
     }
@@ -187,10 +210,6 @@ export function categorizeEntries(entries: string[]): ArchiveCategories {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Classification
-// ---------------------------------------------------------------------------
-
 export function classifyArchive(categories: ArchiveCategories, entries: string[]): DetectedType {
   const hasLevelDat = entries.some((e) => e === 'level.dat' || e.endsWith('/level.dat'))
   const hasWorldDirs = categories.world.length > 0
@@ -210,10 +229,6 @@ function suggestPreset(detectedType: DetectedType): PresetName | null {
   return null
 }
 
-// ---------------------------------------------------------------------------
-// Full archive analysis
-// ---------------------------------------------------------------------------
-
 export async function analyzeArchive(archivePath: string): Promise<{
   entries: string[]
   categories: ArchiveCategories
@@ -232,10 +247,6 @@ export async function analyzeArchive(archivePath: string): Promise<{
 
   return { entries, categories, detectedType, suggestedPreset }
 }
-
-// ---------------------------------------------------------------------------
-// Temp file management
-// ---------------------------------------------------------------------------
 
 export async function saveUploadedFile(file: File): Promise<{ importId: string; archivePath: string }> {
   const importId = crypto.randomUUID()
