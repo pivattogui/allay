@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { bigint, boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -49,8 +49,8 @@ export const backups = pgTable(
       .notNull()
       .references(() => servers.id, { onDelete: 'cascade' }),
     filename: text('filename').notNull(),
-    sizeBytes: integer('size_bytes').notNull().default(0),
-    type: text('type', { enum: ['manual', 'scheduled'] }).notNull(),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull().default(0),
+    type: text('type', { enum: ['manual', 'scheduled', 'pre-import'] }).notNull(),
     status: text('status', { enum: ['pending', 'completed', 'failed'] })
       .notNull()
       .default('completed'),

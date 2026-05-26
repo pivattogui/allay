@@ -223,11 +223,39 @@ export async function updateBackupConfig(serverId: string, config: Partial<Backu
   return data.config
 }
 
-export function importBackup(
+// Import types
+export interface ImportAnalysis {
+  importId: string
+  detectedType: 'world-only' | 'full-backup' | 'mixed'
+  categories: {
+    world: string[]
+    configs: string[]
+    plugins: string[]
+    jars: string[]
+    logs: string[]
+    other: string[]
+  }
+  suggestedPreset: 'world-only' | 'world-configs' | 'all-except-jars' | null
+  totalSize: number
+}
+
+export interface ImportSelection {
+  preset: 'world-only' | 'world-configs' | 'all-except-jars' | null
+  include: string[]
+  exclude: string[]
+}
+
+export interface ImportResult {
+  message: string
+  backupId: string
+  importedPaths: number
+}
+
+export function analyzeImport(
   serverId: string,
   file: File,
   onProgress?: (percent: number) => void,
-): Promise<{ message: string; backupId: string }> {
+): Promise<ImportAnalysis> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     const formData = new FormData()
@@ -245,23 +273,43 @@ export function importBackup(
       } else {
         try {
           const error = JSON.parse(xhr.responseText)
-          reject(new Error(error.error || 'Import failed'))
+          reject(new Error(error.error || 'Analysis failed'))
         } catch {
-          reject(new Error('Import failed'))
+          reject(new Error('Analysis failed'))
         }
       }
     })
 
-    xhr.addEventListener('error', () => reject(new Error('Import failed')))
-    xhr.addEventListener('abort', () => reject(new Error('Import cancelled')))
+    xhr.addEventListener('error', () => reject(new Error('Upload failed')))
+    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
 
-    xhr.open('POST', `/api/backups/${serverId}/import`)
+    xhr.open('POST', `/api/backups/${serverId}/import/analyze`)
     const token = useAuthStore.getState().token
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     }
     xhr.send(formData)
   })
+}
+
+export async function executeImport(
+  serverId: string,
+  importId: string,
+  selection: ImportSelection,
+): Promise<ImportResult> {
+  const res = await fetch(`/api/backups/${serverId}/import/${importId}/execute`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ selection }),
+  })
+  if (!res.ok) {
+    const data = await res.json()
+    throw new Error(data.error || 'Import failed')
+  }
+  return res.json()
 }
 
 // Properties

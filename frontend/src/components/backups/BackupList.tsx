@@ -198,6 +198,11 @@ export function BackupList({ serverId }: BackupListProps) {
                               Failed
                             </Badge>
                           )}
+                          {backup.type === 'pre-import' && (
+                            <Badge variant="secondary" className="text-xs">
+                              Pre-import
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           {backup.status === 'completed' && <span>{formatBytes(backup.sizeBytes)}</span>}

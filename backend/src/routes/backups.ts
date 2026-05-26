@@ -1,20 +1,34 @@
-import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { jwt } from '@elysiajs/jwt'
 import { eq } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
-import * as tar from 'tar'
 import { config, getServerDir } from '../config.js'
 import { db } from '../db/index.js'
 import { backups, servers } from '../db/schema.js'
 import { AppError, ConflictError, NotFoundError, UnauthorizedError, ValidationError } from '../errors.js'
+import { createLogger } from '../logger.js'
 import { backupManager } from '../modules/backups/index.js'
+import {
+  analyzeArchive,
+  cleanExpiredImports,
+  cleanImport,
+  getImportPath,
+  saveUploadedFile,
+} from '../modules/import/analyzer.js'
+import { extractSelection, resolveSelection } from '../modules/import/extractor.js'
 import { processManager } from '../modules/process/index.js'
-import { jarManager } from '../modules/servers/jar-manager.js'
-import { CreateBackupResponse, UpdateBackupConfigBody } from '../schemas/backups.js'
+import {
+  CreateBackupResponse,
+  ImportAnalyzeResponse,
+  ImportExecuteBody,
+  ImportExecuteResponse,
+  UpdateBackupConfigBody,
+} from '../schemas/backups.js'
 import { ErrorResponse, MessageResponse } from '../schemas/common.js'
 import type { JwtPayload } from '../types/index.js'
+
+const log = createLogger('backups-route')
 
 export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags: ['backups'] } })
   .use(jwt({ name: 'jwt', secret: config.jwt.secret, exp: config.jwt.expiresIn }))
@@ -234,14 +248,12 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
     },
   )
   .post(
-    '/:serverId/import',
+    '/:serverId/import/analyze',
     async ({ params, request }) => {
       const { serverId } = params as { serverId: string }
 
       const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1)
-      if (!server) {
-        throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
-      }
+      if (!server) throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
 
       const status = processManager.getStatus(serverId)
       if (status.state === 'running' || status.state === 'starting') {
@@ -250,9 +262,7 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
 
       const formData = await request.formData()
       const file = formData.get('file') as File | null
-      if (!file) {
-        throw new ValidationError('No file uploaded', 'NO_FILE')
-      }
+      if (!file) throw new ValidationError('No file uploaded', 'NO_FILE')
 
       const filename = file.name.toLowerCase()
       const isTarGz = filename.endsWith('.tar.gz') || filename.endsWith('.tgz')
@@ -261,146 +271,104 @@ export const backupsRoutes = new Elysia({ prefix: '/api/backups', detail: { tags
         throw new ValidationError('Only .tar.gz, .tgz, and .zip files are supported', 'UNSUPPORTED_FORMAT')
       }
 
-      const tempId = randomUUID()
-      const tempDir = path.join(config.paths.temp, tempId)
-      fs.mkdirSync(tempDir, { recursive: true })
-      const tempPath = path.join(tempDir, file.name)
+      cleanExpiredImports()
+
+      const { importId, archivePath } = await saveUploadedFile(file)
+      const { categories, detectedType, suggestedPreset } = await analyzeArchive(archivePath)
+
+      const stat = fs.statSync(archivePath)
+
+      return {
+        importId,
+        detectedType,
+        categories,
+        suggestedPreset,
+        totalSize: stat.size,
+      }
+    },
+    {
+      params: t.Object({ serverId: t.String({ description: 'Server UUID' }) }),
+      response: ImportAnalyzeResponse,
+      detail: {
+        summary: 'Analyze import archive',
+        description: 'Upload and analyze an archive file, returning detected content categories and suggested preset.',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+  )
+  .post(
+    '/:serverId/import/:importId/execute',
+    async ({ params, body }) => {
+      const { serverId, importId } = params as { serverId: string; importId: string }
+
+      const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1)
+      if (!server) throw new NotFoundError('Server not found', 'SERVER_NOT_FOUND')
+
+      const status = processManager.getStatus(serverId)
+      if (status.state === 'running' || status.state === 'starting') {
+        throw new ConflictError('Server must be stopped before importing', 'SERVER_BUSY')
+      }
+
+      const archivePath = getImportPath(importId)
+      if (!archivePath) {
+        throw new NotFoundError('Import session expired or not found', 'IMPORT_NOT_FOUND')
+      }
+
+      const { entries, categories } = await analyzeArchive(archivePath)
+
+      const selectedPaths = resolveSelection(body.selection, categories, entries)
+      if (selectedPaths.length === 0) {
+        throw new ValidationError('No files selected for import', 'EMPTY_SELECTION')
+      }
+
+      let backupId: string
+      try {
+        const backup = await backupManager.createBackup(serverId, 'pre-import')
+        backupId = backup.id
+      } catch (_err) {
+        throw new AppError('Failed to create pre-import backup', 500, 'BACKUP_FAILED')
+      }
 
       try {
-        await Bun.write(tempPath, file)
-
-        let backupId: string
-        try {
-          const backup = await backupManager.createBackup(serverId, 'manual')
-          backupId = backup.id
-        } catch (_err) {
-          throw new AppError('Failed to create safety-net backup before import', 500, 'BACKUP_FAILED')
-        }
-
-        const serverDir = getServerDir(server.id)
-        const entries = fs.readdirSync(serverDir)
-        for (const entry of entries) {
-          fs.rmSync(path.join(serverDir, entry), { recursive: true, force: true })
-        }
-
-        if (isTarGz) {
-          await tar.extract({ cwd: serverDir, file: tempPath })
-        } else {
-          const proc = Bun.spawn(['unzip', '-o', '-q', tempPath, '-d', serverDir], {
-            stdout: 'ignore',
-            stderr: 'pipe',
-          })
-          const exitCode = await proc.exited
-          if (exitCode !== 0) {
-            const stderr = await new Response(proc.stderr).text()
-            throw new Error(`unzip failed (exit ${exitCode}): ${stderr.slice(0, 200)}`)
+        const serverDir = getServerDir(serverId)
+        const worldDirsToReplace = categories.world.filter((w) => selectedPaths.some((p) => p.startsWith(w)))
+        for (const worldDir of worldDirsToReplace) {
+          const fullPath = path.join(serverDir, worldDir)
+          if (fs.existsSync(fullPath)) {
+            fs.rmSync(fullPath, { recursive: true, force: true })
           }
         }
 
-        const extracted = fs.readdirSync(serverDir)
-        if (extracted.length === 1) {
-          const singleEntry = path.join(serverDir, extracted[0])
-          if (fs.statSync(singleEntry).isDirectory()) {
-            const innerFiles = fs.readdirSync(singleEntry)
-            for (const innerFile of innerFiles) {
-              fs.renameSync(path.join(singleEntry, innerFile), path.join(serverDir, innerFile))
-            }
-            fs.rmdirSync(singleEntry)
-          }
+        await extractSelection(archivePath, serverId, selectedPaths, entries)
+
+        return {
+          message: 'Import completed successfully',
+          backupId,
+          importedPaths: selectedPaths.length,
         }
-
-        // Cleanup macOS artifacts
-        const macosDir = path.join(serverDir, '__MACOSX')
-        if (fs.existsSync(macosDir)) {
-          fs.rmSync(macosDir, { recursive: true, force: true })
-        }
-
-        // Detect if import is a world-only backup (no server files)
-        const extractedFiles = fs.readdirSync(serverDir)
-        const hasJar = extractedFiles.some((f) => f.endsWith('.jar'))
-        const hasServerProperties = extractedFiles.includes('server.properties')
-        const hasWorldData =
-          extractedFiles.includes('level.dat') || extractedFiles.includes('region') || extractedFiles.includes('world')
-
-        if (!hasJar && !hasServerProperties && hasWorldData) {
-          const worldDir = path.join(serverDir, 'world')
-          fs.mkdirSync(worldDir, { recursive: true })
-          for (const file of fs.readdirSync(serverDir)) {
-            if (file === 'world' || file === 'eula.txt') continue
-            fs.renameSync(path.join(serverDir, file), path.join(worldDir, file))
-          }
-
-          // Restore server.jar and server.properties from safety backup
-          const [safetyBackup] = await db.select().from(backups).where(eq(backups.id, backupId)).limit(1)
-          if (safetyBackup) {
-            const safetyPath = path.join(config.paths.backups, safetyBackup.filename)
-            if (fs.existsSync(safetyPath)) {
-              const extractDir = path.join(config.paths.temp, `restore-${randomUUID()}`)
-              fs.mkdirSync(extractDir, { recursive: true })
-              await tar.extract({ cwd: extractDir, file: safetyPath })
-
-              // Find the server dir inside the extracted backup
-              const extractedDirs = fs.readdirSync(extractDir)
-              const backupServerDir = extractedDirs.length === 1 ? path.join(extractDir, extractedDirs[0]) : extractDir
-
-              for (const essential of ['server.jar', 'server.properties']) {
-                const src = path.join(backupServerDir, essential)
-                if (fs.existsSync(src)) {
-                  fs.copyFileSync(src, path.join(serverDir, essential))
-                }
-              }
-              fs.rmSync(extractDir, { recursive: true, force: true })
-            }
-          }
-        } else {
-          // Full server backup — rename JAR to server.jar if needed
-          if (!fs.existsSync(path.join(serverDir, 'server.jar'))) {
-            const files = fs.readdirSync(serverDir)
-            const jarFile = files.find((f) => f.endsWith('.jar'))
-            if (jarFile) {
-              fs.renameSync(path.join(serverDir, jarFile), path.join(serverDir, 'server.jar'))
-            }
-          }
-        }
-
-        // Final validation — server.jar must exist
-        if (!fs.existsSync(path.join(serverDir, 'server.jar'))) {
-          // Try to download from jarManager as last resort
-          try {
-            const jarPath = await jarManager.download(server.type as 'vanilla' | 'paper', server.version)
-            fs.copyFileSync(jarPath, path.join(serverDir, 'server.jar'))
-          } catch (_jarErr) {}
-        }
-
-        // Ensure eula.txt
-        const eulaPath = path.join(serverDir, 'eula.txt')
-        fs.writeFileSync(eulaPath, 'eula=true\n')
-
-        // Ensure server.properties exists
-        if (!fs.existsSync(path.join(serverDir, 'server.properties'))) {
-          fs.writeFileSync(path.join(serverDir, 'server.properties'), `server-port=${server.port}\n`)
-        }
-
-        fs.rmSync(tempDir, { recursive: true, force: true })
-
-        return { message: 'Backup imported successfully', backupId }
       } catch (err) {
-        if (fs.existsSync(tempDir)) {
-          fs.rmSync(tempDir, { recursive: true, force: true })
+        // Restore the pre-import backup so the server isn't left half-extracted.
+        try {
+          await backupManager.restoreBackup(backupId)
+        } catch (restoreErr) {
+          log.error({ serverId, backupId, err: restoreErr }, 'Pre-import rollback failed')
         }
-
-        if (err instanceof AppError) throw err
-        throw new AppError((err as Error).message || 'Import failed', 500, 'IMPORT_FAILED')
+        throw err
+      } finally {
+        cleanImport(importId)
       }
     },
     {
       params: t.Object({
         serverId: t.String({ description: 'Server UUID' }),
+        importId: t.String({ description: 'Import session ID from analyze' }),
       }),
+      body: ImportExecuteBody,
+      response: ImportExecuteResponse,
       detail: {
-        summary: 'Import backup',
+        summary: 'Execute import',
         description:
-          'Import an external backup archive (.tar.gz, .tgz, .zip) into a stopped server. Creates a safety-net backup first, then replaces all server content with the archive contents.',
+          'Execute a previously analyzed import with the given selection. Creates a pre-import backup of the current world before proceeding.',
         security: [{ bearerAuth: [] }],
       },
     },

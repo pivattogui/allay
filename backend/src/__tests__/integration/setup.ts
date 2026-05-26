@@ -54,7 +54,7 @@ export async function setupTestDb() {
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       "server_id" uuid NOT NULL REFERENCES "servers"("id") ON DELETE CASCADE,
       "filename" text NOT NULL,
-      "size_bytes" integer NOT NULL DEFAULT 0,
+      "size_bytes" bigint NOT NULL DEFAULT 0,
       "type" text NOT NULL,
       "status" text NOT NULL DEFAULT 'completed',
       "created_at" timestamp DEFAULT now() NOT NULL

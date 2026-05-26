@@ -20,7 +20,9 @@ import { setupWebSocket } from './websocket/handler.js'
 
 const log = createLogger('app')
 export function buildApp() {
-  const app = new Elysia()
+  // normalize: 'typebox' avoids the [exact-mirror] Union warnings — exact-mirror
+  // falls back to TypeCompiler when it sees a Union, which isn't initialized here.
+  const app = new Elysia({ normalize: 'typebox' })
     .use(
       swagger({
         path: '/docs',

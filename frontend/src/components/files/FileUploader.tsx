@@ -5,12 +5,20 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
+const ARCHIVE_EXTENSIONS = ['.zip', '.tar.gz', '.tgz']
+
+function isArchiveFile(file: File): boolean {
+  const name = file.name.toLowerCase()
+  return ARCHIVE_EXTENSIONS.some((ext) => name.endsWith(ext))
+}
+
 interface FileUploaderProps {
   serverId: string
   currentPath: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onUploadComplete: () => void
+  onArchiveDetected?: (file: File) => void
 }
 
 interface UploadFile {
@@ -29,18 +37,34 @@ function formatSize(bytes: number): string {
   return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`
 }
 
-export function FileUploader({ serverId, currentPath, open, onOpenChange, onUploadComplete }: FileUploaderProps) {
+export function FileUploader({
+  serverId,
+  currentPath,
+  open,
+  onOpenChange,
+  onUploadComplete,
+  onArchiveDetected,
+}: FileUploaderProps) {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
 
-  const addFiles = useCallback((newFiles: File[]) => {
-    const uploadFiles: UploadFile[] = newFiles.map((file) => ({
-      file,
-      status: 'pending' as const,
-    }))
-    setFiles((prev) => [...prev, ...uploadFiles])
-  }, [])
+  const addFiles = useCallback(
+    (newFiles: File[]) => {
+      // If a single archive file is dropped, redirect to import flow
+      if (newFiles.length === 1 && isArchiveFile(newFiles[0]) && onArchiveDetected) {
+        onArchiveDetected(newFiles[0])
+        return
+      }
+
+      const uploadFiles: UploadFile[] = newFiles.map((file) => ({
+        file,
+        status: 'pending' as const,
+      }))
+      setFiles((prev) => [...prev, ...uploadFiles])
+    },
+    [onArchiveDetected],
+  )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
