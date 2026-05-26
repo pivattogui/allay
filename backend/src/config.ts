@@ -27,7 +27,7 @@ function buildDatabaseUrl(): string {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL
 
   const user = process.env.DB_USER || 'allay'
-  const password = process.env.DB_PASSWORD || 'allay'
+  const password = process.env.DB_PASSWORD ?? ''
   const host = process.env.DB_HOST || 'localhost'
   const port = process.env.DB_PORT || '5432'
   const name = process.env.DB_NAME || 'allay'
@@ -39,7 +39,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATA_DIR: z.string().default(DEFAULT_DATA_DIR),
   DATABASE_URL: z.string().default(buildDatabaseUrl()),
-  JWT_SECRET: z.string().min(16).default('development-secret-change-in-production'),
+  JWT_SECRET: z.string().min(16),
   JWT_EXPIRES_IN: z.string().default('24h'),
   MC_PORT_MIN: z.coerce.number().int().min(1024).max(65535).default(25565),
   MC_PORT_MAX: z.coerce.number().int().min(1024).max(65535).default(25575),

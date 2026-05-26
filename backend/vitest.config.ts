@@ -7,5 +7,9 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     exclude: ['src/__tests__/integration/**'],
     testTimeout: 10000,
+    env: {
+      JWT_SECRET: 'test-secret-at-least-16-chars',
+      NODE_ENV: 'test',
+    },
   },
 })

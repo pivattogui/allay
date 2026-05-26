@@ -19,3 +19,32 @@ describe('config — ALLAY_PUBLIC_ORIGIN', () => {
     expect(config.publicOrigin).toBeUndefined()
   })
 })
+
+describe('config — required secrets', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('rejects missing JWT_SECRET (no insecure default)', async () => {
+    // Mock fs module before importing config to prevent loading .env
+    vi.doMock('node:fs', () => ({
+      default: {
+        existsSync: vi.fn(() => false),
+        readFileSync: vi.fn(),
+      },
+    }))
+    
+    const orig = process.env.JWT_SECRET
+    delete process.env.JWT_SECRET
+    
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`)
+    }) as never)
+    
+    await expect(import('../config.js')).rejects.toThrow(/process\.exit/)
+    
+    exitSpy.mockRestore()
+    vi.doUnmock('node:fs')
+    if (orig) process.env.JWT_SECRET = orig
+  })
+})
