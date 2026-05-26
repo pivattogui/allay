@@ -28,7 +28,7 @@
     "@sinclair/typebox": "^0.34.48",
     "cron-parser": "^5.5.0",
     "drizzle-orm": "^0.45.1",
-    "elysia": "^1.4.27",
+    "elysia": "^1.4.28",
     "jose": "^6.2.2",
     "node-cron": "^3.0.3",
     "pidusage": "^3.0.2",
