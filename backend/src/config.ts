@@ -44,10 +44,7 @@ const envSchema = z.object({
   MC_PORT_MIN: z.coerce.number().int().min(1024).max(65535).default(25565),
   MC_PORT_MAX: z.coerce.number().int().min(1024).max(65535).default(25575),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  ALLAY_PUBLIC_ORIGIN: z.preprocess(
-    (v) => (v === '' ? undefined : v),
-    z.string().url().optional(),
-  ),
+  ALLAY_PUBLIC_ORIGIN: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
 })
 
 const parsed = envSchema.safeParse(process.env)

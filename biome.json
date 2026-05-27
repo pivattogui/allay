@@ -55,6 +55,6 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/dist", "!**/coverage", "!**/*.min.js", "!**/drizzle"]
+    "includes": ["**", "!**/node_modules", "!**/dist", "!**/coverage", "!**/*.min.js", "!**/drizzle", "!data"]
   }
 }
