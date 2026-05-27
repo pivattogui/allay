@@ -1,13 +1,13 @@
-# Allay - Docker Compose
+# Allay - Development Compose
 #
 # Usage:
-#   docker compose up -d              # Start all (dev)
-#   docker compose up -d postgres     # Start database only
-#   docker compose logs -f backend    # Follow backend logs
-#   docker compose down               # Stop all
+#   docker compose -f docker-compose.dev.yml up -d              # postgres + backend
+#   docker compose -f docker-compose.dev.yml up -d postgres     # database only
+#   docker compose -f docker-compose.dev.yml logs -f backend    # follow backend logs
+#   docker compose -f docker-compose.dev.yml down               # stop all
 #
-# Production:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Frontend runs natively for fast HMR:
+#   cd frontend && pnpm dev
 
 services:
   postgres:
@@ -20,7 +20,7 @@ services:
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata-dev:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-allay}"]
       interval: 10s
@@ -29,9 +29,12 @@ services:
 
   backend:
     build:
-      context: ./backend
-      target: development
+      context: .
+      dockerfile: backend/Dockerfile
+      target: backend-builder
     restart: unless-stopped
+    command: ["bun", "run", "--watch", "src/index.ts"]
+    working_dir: /app
     ports:
       - "${BACKEND_PORT:-3000}:3000"
       - "${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}:${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}"
@@ -52,20 +55,5 @@ services:
       postgres:
         condition: service_healthy
 
-  frontend:
-    build:
-      context: ./frontend
-      target: development
-    restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-5173}:5173"
-    environment:
-      VITE_API_URL: http://backend:3000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - backend
-
 volumes:
-  pgdata:
+  pgdata-dev:
