@@ -57,4 +57,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -fsS http://localhost:3000/health || exit 1
 
-CMD ["bun", "run", "dist/index.js"]
+# Apply migrations on startup, then run the server
+CMD ["sh", "-c", "bun run dist/db/migrate.js && bun run dist/index.js"]
