@@ -70,6 +70,16 @@ All routes are Elysia plugins prefixed with `/api`:
 - `index.ts` - All domain types and Zod schemas (Server, Backup, ServerState, etc.)
 - `ws.ts` - WebSocket client type definitions
 
+### Static & SPA serving (`src/static.ts`)
+In production builds, the React frontend is built into `public/` and served by Elysia via `@elysiajs/static`:
+- `/` → `public/index.html` (SPA entry, served manually due to a non-Bun runtime quirk in the plugin)
+- `/assets/*` → hashed static assets with `Cache-Control: public, max-age=31536000, immutable`
+- Any unmatched non-`/api`, non-`/ws`, non-`/health` path → `index.html` (SPA fallback for client-side routing)
+
+In development (`pnpm dev`), `public/` does not exist; the frontend runs separately via Vite on port 5173 with a proxy to the backend.
+
+The plugin uses `alwaysStatic: true` so it registers explicit per-file routes instead of its own wildcard, leaving the `/*` SPA fallback to handle unknown paths.
+
 ## Key Patterns
 
 ### Authentication
@@ -86,6 +96,17 @@ Minecraft servers are stopped with the `stop` command via stdin before SIGTERM, 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://allay:allay@localhost:5432/allay` |
-| `JWT_SECRET` | JWT signing secret (min 16 chars) | dev default |
+| `JWT_SECRET` | JWT signing secret (min 16 chars) | _(required — no default)_ |
+| `ALLAY_PUBLIC_ORIGIN` | Public URL of the deployment (sets CORS allowed origin). Leave empty for same-origin. | _(unset)_ |
 | `DATA_DIR` | Base data directory | `./data` |
 | `PORT` | API port | `3000` |
+
+## Dual package manager gotcha
+
+This repo uses **both** Bun (runtime + container) and pnpm (workspace + dev tooling). Each has its own lockfile (`bun.lock`, `pnpm-lock.yaml`) and per the repo rules both must be committed together when a backend dependency changes.
+
+When adding a dependency with `pnpm add --filter allay-backend`, pnpm may resolve a different version than what's pinned in `bun.lock`. If you also run `bun install` locally, you can end up with two distinct `node_modules/elysia` (one bun-installed under `backend/node_modules/`, one pnpm-hoisted under `node_modules/.pnpm/`). TypeScript will see them as distinct types and `tsc` will fail with cross-module assignability errors.
+
+Recovery:
+1. Run `bun update <dep>` in `backend/` to align bun.lock to the same version pnpm resolved.
+2. If `backend/node_modules` has real (bun-installed) packages and you also have pnpm `.pnpm/` copies, delete `backend/node_modules` and run `pnpm install` from the repo root to recreate it as a symlink farm. Local dev typechecks only against the pnpm-hoisted copy this way. Containers still get a clean `bun install` inside the runtime image.
