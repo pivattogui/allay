@@ -1,5 +1,8 @@
 node_modules
 dist
-*.log
 .env
-.env.*
+.env.local
+*.log
+__tests__
+vitest.config.ts
+.turbo
