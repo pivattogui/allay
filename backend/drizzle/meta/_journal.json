@@ -29,6 +29,13 @@
       "when": 1779831881000,
       "tag": "0003_bigint_size_bytes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779848044324,
+      "tag": "0004_chubby_nomad",
+      "breakpoints": true
     }
   ]
 }
