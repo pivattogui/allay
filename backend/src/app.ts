@@ -16,6 +16,7 @@ import { backupsRoutes } from './routes/backups.js'
 import { filesRoutes } from './routes/files.js'
 import { serversRoutes } from './routes/servers.js'
 import { systemRoutes } from './routes/system.js'
+import { staticRoutes } from './static.js'
 import { setupWebSocket } from './websocket/handler.js'
 
 const log = createLogger('app')
@@ -103,6 +104,7 @@ export function buildApp() {
     .use(backupsRoutes)
     .use(filesRoutes)
     .use(setupWebSocket)
+    .use(staticRoutes) // must come last — wildcard catches anything unmatched above
 
   return app
 }
