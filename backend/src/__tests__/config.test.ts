@@ -18,6 +18,13 @@ describe('config — ALLAY_PUBLIC_ORIGIN', () => {
     const { config } = await import('../config.js')
     expect(config.publicOrigin).toBeUndefined()
   })
+
+  it('treats empty string as unset (compose passes "" when var is undefined)', async () => {
+    process.env.JWT_SECRET = 'test-secret-at-least-16-chars'
+    process.env.ALLAY_PUBLIC_ORIGIN = ''
+    const { config } = await import('../config.js')
+    expect(config.publicOrigin).toBeUndefined()
+  })
 })
 
 describe('config — required secrets', () => {
