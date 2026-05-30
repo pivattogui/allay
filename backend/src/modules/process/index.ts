@@ -6,6 +6,8 @@ import { config, getServerDir } from '../../config.js'
 import { AppError, ConflictError } from '../../errors.js'
 import { createLogger } from '../../logger.js'
 import type { Server, ServerState, ServerStatus } from '../../types/index.js'
+import { javaRuntimeRegistry } from '../java/runtime-registry.js'
+import { resolveJavaCommand } from './java-resolver.js'
 
 const log = createLogger('process')
 
@@ -48,19 +50,24 @@ class ProcessManager extends EventEmitter {
 
     javaArgs.push('-jar', 'server.jar', 'nogui')
 
-    // Resolve Java binary path (asdf shims may not work with async spawn in Bun)
-    let javaCommand = server.javaPath || 'java'
-    if (javaCommand === 'java') {
-      try {
-        const asdfPath = execSync('asdf where java 2>/dev/null', { encoding: 'utf-8' }).trim()
-        const bin = path.join(asdfPath, 'bin', 'java')
-        if (asdfPath && fs.existsSync(bin)) {
-          javaCommand = bin
-        }
-      } catch {
-        // fallback to 'java'
+    const resolved = resolveJavaCommand(server, {
+      registry: javaRuntimeRegistry,
+      fallbackPath: this.resolveLegacyJavaPath(),
+    })
+
+    if (resolved.kind === 'error') {
+      if (resolved.reason === 'unavailable') {
+        const available = resolved.availableMajors.length ? resolved.availableMajors.join(', ') : 'none'
+        throw new AppError(
+          `Server requires Java ${resolved.requiredMajor}, but only [${available}] are available in this runtime`,
+          500,
+          'JAVA_RUNTIME_UNAVAILABLE',
+        )
       }
+      throw new AppError('No Java runtime available', 500, 'JAVA_RUNTIME_UNAVAILABLE')
     }
+
+    const javaCommand = resolved.javaCommand
 
     if (!fs.existsSync(getServerDir(server.id))) {
       throw new AppError(`Server directory not found: ${getServerDir(server.id)}`, 500, 'SERVER_DIR_NOT_FOUND')
@@ -277,6 +284,19 @@ class ProcessManager extends EventEmitter {
     return Array.from(this.processes.entries())
       .filter(([, info]) => info.state === 'running')
       .map(([id]) => id)
+  }
+
+  private resolveLegacyJavaPath(): string | null {
+    try {
+      const asdfPath = execSync('asdf where java 2>/dev/null', { encoding: 'utf-8' }).trim()
+      const bin = path.join(asdfPath, 'bin', 'java')
+      if (asdfPath && fs.existsSync(bin)) {
+        return bin
+      }
+    } catch {
+      // asdf not installed or no java plugin
+    }
+    return 'java'
   }
 
   private cleanupStaleLocks(serverDir: string): void {

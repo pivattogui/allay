@@ -1,7 +1,7 @@
 import { cors } from '@elysiajs/cors'
 import { jwt } from '@elysiajs/jwt'
 import { swagger } from '@elysiajs/swagger'
-import { eq } from 'drizzle-orm'
+import { eq, isNull } from 'drizzle-orm'
 import { Elysia } from 'elysia'
 import { config } from './config.js'
 import { db } from './db/index.js'
@@ -9,8 +9,11 @@ import { servers } from './db/schema.js'
 import { AppError } from './errors.js'
 import { createLogger } from './logger.js'
 import { backupManager } from './modules/backups/index.js'
+import { backfillJavaVersions } from './modules/java/backfill.js'
+import { javaRuntimeRegistry } from './modules/java/runtime-registry.js'
 import { processManager } from './modules/process/index.js'
 import { restartScheduler } from './modules/scheduler/restart-scheduler.js'
+import { jarManager } from './modules/servers/jar-manager.js'
 import { authRoutes } from './routes/auth.js'
 import { backupsRoutes } from './routes/backups.js'
 import { filesRoutes } from './routes/files.js'
@@ -111,6 +114,35 @@ export function buildApp() {
 
 export async function initializeServices() {
   const restartAttempts = new Map<string, { count: number; firstAttemptAt: number }>()
+
+  javaRuntimeRegistry.discover()
+  log.info(
+    { majors: javaRuntimeRegistry.availableMajors(), fallback: javaRuntimeRegistry.getFallback() },
+    'Java runtimes discovered',
+  )
+
+  try {
+    const backfillResult = await backfillJavaVersions({
+      loadServersNeedingBackfill: () =>
+        db
+          .select({ id: servers.id, type: servers.type, version: servers.version })
+          .from(servers)
+          .where(isNull(servers.javaVersion)),
+      lookupJavaMajor: (type, version) => jarManager.getRequiredJavaMajor(type, version),
+      applyJavaVersion: async (id, major) => {
+        await db
+          .update(servers)
+          .set({ javaVersion: String(major) })
+          .where(eq(servers.id, id))
+      },
+      onError: (id, err) => log.warn({ serverId: id, err }, 'Java version backfill failed for server'),
+    })
+    if (backfillResult.updated || backfillResult.failed) {
+      log.info(backfillResult, 'Java version backfill completed')
+    }
+  } catch (err) {
+    log.error({ err }, 'Java version backfill task crashed')
+  }
 
   await backupManager.initializeSchedules()
   await restartScheduler.initialize()

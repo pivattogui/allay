@@ -24,7 +24,8 @@ RUN bun build src/index.ts src/db/migrate.ts --target bun --outdir dist --minify
 # ---- runtime ----
 FROM oven/bun:1 AS runtime
 
-# Java 21 JRE for Minecraft server processes
+# Temurin 21 + 25 JREs for Minecraft (21 for ≤1.21.x, 25 for ≥26.x)
+# ProcessManager picks the right runtime per server based on the Mojang manifest's javaVersion.majorVersion.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       wget apt-transport-https gnupg curl unzip ca-certificates \
@@ -32,7 +33,8 @@ RUN apt-get update \
       | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
  && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" \
       > /etc/apt/sources.list.d/adoptium.list \
- && apt-get update && apt-get install -y --no-install-recommends temurin-21-jre \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends temurin-21-jre temurin-25-jre \
  && rm -rf /var/lib/apt/lists/*
 
 # Use the non-root user already provided by the base image

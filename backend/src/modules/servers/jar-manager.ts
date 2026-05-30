@@ -17,6 +17,10 @@ interface VanillaVersionData {
   downloads: {
     server: { url: string; sha1: string }
   }
+  javaVersion?: {
+    component?: string
+    majorVersion: number
+  }
 }
 
 interface PaperVersions {
@@ -109,21 +113,41 @@ class JarManager {
     return jarPath
   }
 
-  private async getVanillaDownloadUrl(version: string): Promise<string> {
-    // Get manifest
+  private async getVanillaVersionData(version: string): Promise<VanillaVersionData> {
     const manifestResponse = await fetch(this.vanillaManifestUrl, this.fetchOptions)
     const manifest = (await manifestResponse.json()) as VanillaManifest
 
     const versionInfo = manifest.versions.find((v) => v.id === version)
     if (!versionInfo) {
-      throw new Error(`Version ${version} not found`)
+      throw new Error(`Version ${version} not found in Mojang manifest`)
     }
 
-    // Get version data
     const versionResponse = await fetch(versionInfo.url, this.fetchOptions)
-    const versionData = (await versionResponse.json()) as VanillaVersionData
+    return (await versionResponse.json()) as VanillaVersionData
+  }
 
+  private async getVanillaDownloadUrl(version: string): Promise<string> {
+    const versionData = await this.getVanillaVersionData(version)
     return versionData.downloads.server.url
+  }
+
+  async getRequiredJavaMajor(type: ServerType, version: string): Promise<number> {
+    const candidates = type === 'paper' ? [version, version.replace(/-(pre|rc)\d+$/, '')] : [version]
+
+    let lastErr: unknown
+    for (const candidate of candidates) {
+      if (!candidate) continue
+      try {
+        const data = await this.getVanillaVersionData(candidate)
+        if (!data.javaVersion?.majorVersion) {
+          throw new Error(`Mojang manifest for ${candidate} has no javaVersion.majorVersion`)
+        }
+        return data.javaVersion.majorVersion
+      } catch (err) {
+        lastErr = err
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(`Could not resolve Java requirement for ${type}/${version}`)
   }
 
   private async getPaperDownloadUrl(version: string): Promise<string> {

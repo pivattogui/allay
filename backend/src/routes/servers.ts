@@ -9,6 +9,7 @@ import { config, getServerDir } from '../config.js'
 import { db } from '../db/index.js'
 import { backupConfigs, events, servers } from '../db/schema.js'
 import { AppError, ConflictError, NotFoundError, UnauthorizedError, ValidationError } from '../errors.js'
+import { assertJavaAvailable } from '../modules/java/gate.js'
 import { processManager } from '../modules/process/index.js'
 import { jarManager } from '../modules/servers/jar-manager.js'
 import { ErrorResponse, IdParam, MessageResponse } from '../schemas/common.js'
@@ -142,6 +143,8 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         throw new ValidationError('Minimum RAM cannot exceed maximum RAM', 'INVALID_RAM_CONFIG')
       }
 
+      const requiredJavaMajor = await assertJavaAvailable(input.type, input.version)
+
       const id = uuidv4()
       const directory = path.join(config.paths.servers, id)
 
@@ -152,6 +155,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         fs.writeFileSync(path.join(directory, 'eula.txt'), 'eula=true\n')
         fs.writeFileSync(path.join(directory, 'server.properties'), `server-port=${input.port}\n`)
       } catch (err: any) {
+        if (err instanceof AppError) throw err
         throw new AppError(`Server provisioning failed: ${err.message}`, 500, 'PROVISION_FAILED')
       }
 
@@ -163,6 +167,7 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         port: input.port,
         ramMinMb: input.ramMinMb,
         ramMaxMb: input.ramMaxMb,
+        javaVersion: String(requiredJavaMajor),
         directory,
         autoStart: input.autoStart,
         autoRestart: input.autoRestart,
@@ -991,6 +996,8 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
         throw new ConflictError('Server must be stopped before migration', 'SERVER_RUNNING')
       }
 
+      const requiredJavaMajor = await assertJavaAvailable(type as 'vanilla' | 'paper', version)
+
       const { backupManager } = await import('../modules/backups/index.js')
 
       let backupId: string
@@ -1014,7 +1021,12 @@ export const serversRoutes = new Elysia({ prefix: '/api/servers', detail: { tags
 
       await db
         .update(servers)
-        .set({ type: type as 'vanilla' | 'paper', version, updatedAt: new Date() })
+        .set({
+          type: type as 'vanilla' | 'paper',
+          version,
+          javaVersion: String(requiredJavaMajor),
+          updatedAt: new Date(),
+        })
         .where(eq(servers.id, id))
 
       await db.insert(events).values({
