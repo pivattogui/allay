@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
-import { JavaRuntimeRegistry, parseJavaMajor } from './runtime-registry.js'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { JavaRuntimeRegistry, nodeJavaProbe, parseJavaMajor } from './runtime-registry.js'
 
 describe('parseJavaMajor', () => {
   it.each([
@@ -126,6 +129,46 @@ describe('JavaRuntimeRegistry', () => {
     registry.discover()
 
     expect(registry.isEmpty()).toBe(true)
+  })
+
+  describe('nodeJavaProbe (integration with a shell stub that writes to stderr like real java)', () => {
+    let tmpRoot: string
+
+    beforeEach(() => {
+      tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'java-runtime-registry-'))
+    })
+
+    afterEach(() => {
+      fs.rmSync(tmpRoot, { recursive: true, force: true })
+    })
+
+    function makeJavaStub(name: string, versionLine: string, target: 'stdout' | 'stderr'): void {
+      const binDir = path.join(tmpRoot, name, 'bin')
+      fs.mkdirSync(binDir, { recursive: true })
+      const redirect = target === 'stderr' ? '>&2' : ''
+      fs.writeFileSync(path.join(binDir, 'java'), `#!/bin/sh\necho '${versionLine}' ${redirect}\n`, { mode: 0o755 })
+    }
+
+    it('discovers a runtime whose -version output comes from stderr (matches real java behavior)', () => {
+      makeJavaStub('temurin-21', 'openjdk version "21.0.11" 2024-04-16', 'stderr')
+      makeJavaStub('temurin-25', 'openjdk version "25" 2025-09-16', 'stderr')
+
+      const registry = new JavaRuntimeRegistry([tmpRoot], nodeJavaProbe)
+      registry.discover()
+
+      expect(registry.availableMajors()).toEqual([21, 25])
+      expect(registry.getPath(21)).toBe(path.join(tmpRoot, 'temurin-21', 'bin', 'java'))
+      expect(registry.getPath(25)).toBe(path.join(tmpRoot, 'temurin-25', 'bin', 'java'))
+    })
+
+    it('also handles stubs that write -version to stdout', () => {
+      makeJavaStub('temurin-21', 'openjdk version "21.0.11" 2024-04-16', 'stdout')
+
+      const registry = new JavaRuntimeRegistry([tmpRoot], nodeJavaProbe)
+      registry.discover()
+
+      expect(registry.availableMajors()).toEqual([21])
+    })
   })
 
   describe('findCompatible', () => {

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -91,7 +91,7 @@ export class JavaRuntimeRegistry {
 
 const DEFAULT_SCAN_DIRS = ['/opt/java', '/usr/lib/jvm']
 
-const defaultProbe: RuntimeProbe = {
+export const nodeJavaProbe: RuntimeProbe = {
   listDir(dir) {
     try {
       return fs.readdirSync(dir)
@@ -100,16 +100,12 @@ const defaultProbe: RuntimeProbe = {
     }
   },
   versionOutput(javaBinPath) {
-    try {
-      if (!fs.existsSync(javaBinPath)) return null
-      return execFileSync(javaBinPath, ['-version'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })
-    } catch (err) {
-      const stderr = (err as { stderr?: Buffer | string }).stderr
-      if (typeof stderr === 'string') return stderr
-      if (stderr instanceof Buffer) return stderr.toString('utf-8')
-      return null
-    }
+    if (!fs.existsSync(javaBinPath)) return null
+    const result = spawnSync(javaBinPath, ['-version'], { encoding: 'utf-8' })
+    if (result.error) return null
+    const combined = `${result.stdout ?? ''}${result.stderr ?? ''}`
+    return combined.length > 0 ? combined : null
   },
 }
 
-export const javaRuntimeRegistry = new JavaRuntimeRegistry(DEFAULT_SCAN_DIRS, defaultProbe)
+export const javaRuntimeRegistry = new JavaRuntimeRegistry(DEFAULT_SCAN_DIRS, nodeJavaProbe)
