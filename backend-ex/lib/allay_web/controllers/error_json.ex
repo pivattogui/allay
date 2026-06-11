@@ -1,21 +1,22 @@
 defmodule AllayWeb.ErrorJSON do
   @moduledoc """
-  This module is invoked by your endpoint in case of errors on JSON requests.
-
-  See config/config.exs.
+  Renders errors that bypass FallbackController (router 404s, crashes)
+  in the same `{error, code}` contract the rest of the API uses.
   """
 
-  # If you want to customize a particular status code,
-  # you may add your own clauses, such as:
-  #
-  # def render("500.json", _assigns) do
-  #   %{errors: %{detail: "Internal Server Error"}}
-  # end
+  # The generic path would produce INTERNAL_SERVER_ERROR; the legacy TS
+  # backend emits INTERNAL_ERROR for 500s (backend/src/app.ts onError),
+  # and parity with it is the contract.
+  def render("500.json", _assigns) do
+    %{error: "Internal Server Error", code: "INTERNAL_ERROR"}
+  end
 
-  # By default, Phoenix returns the status message from
-  # the template name. For example, "404.json" becomes
-  # "Not Found".
   def render(template, _assigns) do
-    %{errors: %{detail: Phoenix.Controller.status_message_from_template(template)}}
+    message = Phoenix.Controller.status_message_from_template(template)
+
+    %{
+      error: message,
+      code: message |> String.upcase() |> String.replace(" ", "_")
+    }
   end
 end

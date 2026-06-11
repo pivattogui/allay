@@ -23,7 +23,6 @@ defmodule AllayWeb.AuthController do
     end
   end
 
-  # credo:disable-for-next-line Credo.Check.Design.AliasUsage
   def login(_conn, _params) do
     {:error, :missing_credentials}
   end
