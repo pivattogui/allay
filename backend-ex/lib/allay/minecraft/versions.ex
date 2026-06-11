@@ -50,7 +50,8 @@ defmodule Allay.Minecraft.Versions do
       {:ok, %{url: url, sha1: server["sha1"]}}
     else
       nil -> {:error, "No server download in Mojang metadata for #{version}"}
-      error -> error
+      %{} -> {:error, "No server download in Mojang metadata for #{version}"}
+      {:error, _} = error -> error
     end
   end
 
@@ -65,6 +66,7 @@ defmodule Allay.Minecraft.Versions do
       {:ok, %{url: "#{build_url}/downloads/#{jar_name}", sha1: nil}}
     else
       {:ok, %{"builds" => []}} -> {:error, "No builds found for Paper #{version}"}
+      {:ok, _} -> {:error, "No builds found for Paper #{version}"}
       nil -> {:error, "No download found for Paper #{version}"}
       {:error, _} = error -> error
     end

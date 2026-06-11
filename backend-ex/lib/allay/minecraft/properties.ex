@@ -30,7 +30,7 @@ defmodule Allay.Minecraft.Properties do
     pattern = ~r/^#{Regex.escape(key)}=.*$/m
 
     cond do
-      Regex.match?(pattern, raw) -> Regex.replace(pattern, raw, line)
+      Regex.match?(pattern, raw) -> Regex.replace(pattern, raw, fn _ -> line end)
       raw == "" -> line <> "\n"
       String.ends_with?(raw, "\n") -> raw <> line <> "\n"
       true -> raw <> "\n" <> line <> "\n"

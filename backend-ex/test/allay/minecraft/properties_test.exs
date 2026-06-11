@@ -58,5 +58,9 @@ defmodule Allay.Minecraft.PropertiesTest do
       assert Properties.put_key("motd=hello", "rcon.port", "25575") ==
                "motd=hello\nrcon.port=25575\n"
     end
+
+    test "values containing backslash digits are not treated as backreferences" do
+      assert Properties.put_key("motd=old\n", "motd", "x\\0y") == "motd=x\\0y\n"
+    end
   end
 end

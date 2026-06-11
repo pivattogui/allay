@@ -42,7 +42,7 @@ defmodule Allay.Minecraft.JarCache do
       {:ok, %{status: status}} ->
         {:error, "Failed to download JAR: status #{status}"}
 
-      {:error, %Req.TransportError{} = e} ->
+      {:error, %{__exception__: true} = e} ->
         {:error, "Failed to download JAR: #{Exception.message(e)}"}
 
       {:error, message} when is_binary(message) ->

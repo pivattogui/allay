@@ -24,6 +24,11 @@ defmodule Allay.Minecraft.JavaRuntimeTest do
         assert JavaRuntime.parse_java_major(garbage) == nil
       end
     end
+
+    test "string without version prefix does not parse" do
+      # Does not contain the literal `version "` prefix required by the regex
+      assert JavaRuntime.parse_java_major(~s|something else "21.0.11" else|) == nil
+    end
   end
 
   describe "discover/1 with fake JDK trees" do
@@ -73,6 +78,28 @@ defmodule Allay.Minecraft.JavaRuntimeTest do
       File.mkdir_p!(Path.join(base, "not-a-jdk"))
       assert JavaRuntime.discover([base]) == %{}
       assert JavaRuntime.discover(["/nonexistent-dir"]) == %{}
+    end
+
+    test "first scan dir wins across dirs for the same major", %{base: base} do
+      base2 = Path.join(System.tmp_dir!(), "jdks2-#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf!(base2) end)
+
+      fake_jdk!(base, "temurin-21", :stderr, "21.0.1")
+      fake_jdk!(base2, "temurin-21-alt", :stderr, "21.0.9")
+
+      runtimes = JavaRuntime.discover([base, base2])
+      assert runtimes[21] =~ Path.join(base, "temurin-21")
+      refute runtimes[21] =~ "jdks2"
+    end
+
+    test "executable java emitting garbage is ignored", %{base: base} do
+      bin = Path.join([base, "garbage-jdk", "bin"])
+      File.mkdir_p!(bin)
+      java = Path.join(bin, "java")
+      File.write!(java, "#!/bin/sh\necho 'no version here'\n")
+      File.chmod!(java, 0o755)
+
+      assert JavaRuntime.discover([base]) == %{}
     end
   end
 

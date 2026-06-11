@@ -62,6 +62,11 @@ defmodule Allay.Minecraft.VersionsTest do
     end
   end
 
+  @meta_1_21_11 %{
+    "javaVersion" => %{"majorVersion" => 21},
+    "downloads" => %{}
+  }
+
   describe "required_java_major/2" do
     test "vanilla reads javaVersion.majorVersion from version metadata" do
       stub_routes(%{
@@ -81,6 +86,25 @@ defmodule Allay.Minecraft.VersionsTest do
       })
 
       assert {:ok, 21} = Versions.required_java_major(:paper, "1.21.11-rc2")
+    end
+
+    test "paper exact version without suffix resolves via manifest" do
+      stub_routes(%{
+        {"launchermeta.mojang.com", "/mc/game/version_manifest.json"} => @manifest,
+        {"piston-meta.example", "/1.21.11.json"} => @meta_1_21_11
+      })
+
+      assert {:ok, 21} = Versions.required_java_major(:paper, "1.21.11")
+    end
+
+    test "paper candidates last-error-wins when neither candidate is in manifest" do
+      stub_routes(%{
+        {"launchermeta.mojang.com", "/mc/game/version_manifest.json"} => @manifest
+      })
+
+      assert {:error, message} = Versions.required_java_major(:paper, "9.9.9-rc1")
+      # candidates are ["9.9.9-rc1", "9.9.9"]; last tried is "9.9.9"
+      assert message =~ "9.9.9"
     end
 
     test "unknown version errors mentioning the version" do
@@ -133,6 +157,25 @@ defmodule Allay.Minecraft.VersionsTest do
     test "paper with no builds errors" do
       stub_routes(%{
         {"api.papermc.io", "/v2/projects/paper/versions/0.0.0/builds"} => %{"builds" => []}
+      })
+
+      assert {:error, message} = Versions.download_spec(:paper, "0.0.0")
+      assert message =~ "0.0.0"
+    end
+
+    test "vanilla metadata without server download errors" do
+      stub_routes(%{
+        {"launchermeta.mojang.com", "/mc/game/version_manifest.json"} => @manifest,
+        {"piston-meta.example", "/26.1.2.json"} => %{"downloads" => %{}}
+      })
+
+      assert {:error, message} = Versions.download_spec(:vanilla, "26.1.2")
+      assert message =~ "26.1.2"
+    end
+
+    test "paper body without builds key errors" do
+      stub_routes(%{
+        {"api.papermc.io", "/v2/projects/paper/versions/0.0.0/builds"} => %{"unexpected" => true}
       })
 
       assert {:error, message} = Versions.download_spec(:paper, "0.0.0")

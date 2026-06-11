@@ -4,6 +4,13 @@ defmodule Allay.Minecraft.RconTest do
   alias Allay.Minecraft.Rcon
 
   describe "packet framing (pure)" do
+    test "decode returns error for malformed length prefixes" do
+      assert {:error, :malformed_packet} = Rcon.decode_packet(<<-1::32-signed-little, 0, 0>>)
+
+      assert {:error, :malformed_packet} =
+               Rcon.decode_packet(<<5::32-signed-little, 1, 2, 3, 4, 5>>)
+    end
+
     test "encodes a packet with size prefix and double null terminator" do
       packet = Rcon.encode_packet(7, 3, "secret")
 
@@ -82,6 +89,19 @@ defmodule Allay.Minecraft.RconTest do
 
     test "connection refused surfaces as an error" do
       assert {:error, _reason} = Rcon.connect("127.0.0.1", 1, "x", timeout: 500)
+    end
+
+    test "auth transport failure closes and errors" do
+      {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+      {:ok, port} = :inet.port(listen)
+
+      Task.start(fn ->
+        {:ok, socket} = :gen_tcp.accept(listen, 5_000)
+        :gen_tcp.close(socket)
+      end)
+
+      assert {:error, _reason} = Rcon.connect("127.0.0.1", port, "x", timeout: 1_000)
+      :gen_tcp.close(listen)
     end
   end
 end
