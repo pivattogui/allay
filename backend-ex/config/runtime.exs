@@ -22,6 +22,10 @@ end
 
 config :allay, AllayWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+if data_dir = System.get_env("DATA_DIR") do
+  config :allay, :data_dir, data_dir
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

@@ -52,6 +52,8 @@ config :allay, AllayWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :allay, dev_routes: true
 
+config :allay, :data_dir, "data"
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 
