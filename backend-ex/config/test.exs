@@ -31,3 +31,5 @@ config :phoenix,
   sort_verified_routes_query_params: true
 
 config :bcrypt_elixir, :log_rounds, 1
+
+config :allay, :minecraft_req_options, plug: {Req.Test, Allay.Minecraft.APIStub}
