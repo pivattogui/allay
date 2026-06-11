@@ -5,6 +5,10 @@ defmodule AllayWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :authenticated do
+    plug AllayWeb.Plugs.ApiAuth
+  end
+
   scope "/", AllayWeb do
     pipe_through :api
 
