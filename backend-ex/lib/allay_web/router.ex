@@ -15,8 +15,18 @@ defmodule AllayWeb.Router do
     get "/health", HealthController, :show
   end
 
-  scope "/api", AllayWeb do
+  scope "/api/auth", AllayWeb do
     pipe_through :api
+
+    get "/status", AuthController, :status
+    post "/setup", AuthController, :setup
+    post "/login", AuthController, :login
+  end
+
+  scope "/api/auth", AllayWeb do
+    pipe_through [:api, :authenticated]
+
+    get "/me", AuthController, :me
   end
 
   # Enable LiveDashboard in development
