@@ -5,6 +5,12 @@ defmodule AllayWeb.Router do
     plug :accepts, ["json"]
   end
 
+  scope "/", AllayWeb do
+    pipe_through :api
+
+    get "/health", HealthController, :show
+  end
+
   scope "/api", AllayWeb do
     pipe_through :api
   end
