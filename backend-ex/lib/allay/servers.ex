@@ -8,6 +8,7 @@ defmodule Allay.Servers do
 
   alias Allay.Accounts.Scope
   alias Allay.Repo
+  alias Allay.Servers.Provisioner
   alias Allay.Servers.Server
 
   @doc """
@@ -34,5 +35,14 @@ defmodule Allay.Servers do
       :error ->
         {:error, :not_found}
     end
+  end
+
+  @doc """
+  Provisions a new server. Delegates to `Allay.Servers.Provisioner`.
+
+  `opts` accepts `:data_dir` to override the configured data directory (tests).
+  """
+  def create_server(%Scope{} = scope, attrs, opts \\ []) do
+    Provisioner.provision(scope, attrs, opts)
   end
 end
