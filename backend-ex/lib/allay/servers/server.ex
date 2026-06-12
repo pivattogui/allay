@@ -7,6 +7,9 @@ defmodule Allay.Servers.Server do
 
   @type t :: %__MODULE__{}
 
+  # rcon_password is a localhost secret between the panel and the Java
+  # process; keep it out of inspect/log output.
+  @derive {Inspect, except: [:rcon_password]}
   schema "servers" do
     field :name, :string
     field :type, :string

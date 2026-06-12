@@ -48,10 +48,25 @@ defmodule Allay.Servers.Boot do
   def run(opts \\ []) do
     JavaRegistry.discover()
 
-    Repo.all(from s in Server, where: s.auto_start == true)
+    auto_start_servers()
     |> Enum.each(&start_one(&1, opts))
 
     :ok
+  end
+
+  # The DB may be unreachable at boot (e.g. Postgres still coming up). The panel
+  # must still boot — auto-start is skipped and the user starts servers manually
+  # once the DB recovers. No retry: a retry loop here would block the boot Task.
+  defp auto_start_servers do
+    Repo.all(from s in Server, where: s.auto_start == true)
+  rescue
+    e ->
+      Logger.error(
+        "Auto-start skipped: could not load servers (#{Exception.message(e)}). " <>
+          "Panel boots; start servers manually once the database is reachable."
+      )
+
+      []
   end
 
   defp start_one(%Server{} = server, opts) do

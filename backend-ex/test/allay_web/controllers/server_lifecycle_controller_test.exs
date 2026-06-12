@@ -141,6 +141,17 @@ defmodule AllayWeb.ServerLifecycleControllerTest do
       assert %{"status" => %{"state" => "running"}} =
                json_response(get(conn, ~p"/api/servers/#{server.id}/status"), 200)
 
+      # Double-start while running is a 409.
+      assert %{"code" => "SERVER_ALREADY_RUNNING"} =
+               json_response(post(conn, ~p"/api/servers/#{server.id}/start"), 409)
+
+      # A runtime-affecting config change while running reports needsRestart.
+      assert %{"needsRestart" => true} =
+               json_response(
+                 patch(conn, ~p"/api/servers/#{server.id}/config", %{"jvmArgs" => "-XX:+UseZGC"}),
+                 200
+               )
+
       FakeRcon.set(rcon_port, %{ready?: true, on_exec: fn "list" -> {:ok, "3 players"} end})
 
       cmd_conn = post(conn, ~p"/api/servers/#{server.id}/command", %{"command" => "list"})

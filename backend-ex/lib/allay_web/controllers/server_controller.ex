@@ -27,31 +27,10 @@ defmodule AllayWeb.ServerController do
   def create(conn, params) do
     scope = conn.assigns.current_scope
 
-    with {:ok, server} <- create_server(scope, ServerParams.to_attrs(params)) do
+    with {:ok, server} <- Servers.create_server(scope, ServerParams.to_attrs(params)) do
       conn
       |> put_status(:created)
       |> render(:show, server: server, status: Runtime.status(server.id))
-    end
-  end
-
-  # The provisioner surfaces a duplicate port as a unique-constraint changeset
-  # error; the wire contract expects 409 PORT_IN_USE there (the React client
-  # branches on the code), distinct from a 400 VALIDATION_ERROR. Remap at the
-  # boundary so the Provisioner's pinned changeset return stays untouched.
-  defp create_server(scope, attrs) do
-    case Servers.create_server(scope, attrs) do
-      {:error, %Ecto.Changeset{} = changeset} ->
-        if port_taken?(changeset), do: {:error, :port_in_use}, else: {:error, changeset}
-
-      other ->
-        other
-    end
-  end
-
-  defp port_taken?(%Ecto.Changeset{errors: errors}) do
-    case errors[:port] do
-      {_msg, opts} -> Keyword.get(opts, :constraint) == :unique
-      _ -> false
     end
   end
 

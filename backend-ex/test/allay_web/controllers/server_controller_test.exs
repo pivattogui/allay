@@ -73,6 +73,38 @@ defmodule AllayWeb.ServerControllerTest do
   end
 
   describe "POST /api/servers" do
+    test "201 with {server: wire} on the happy path", %{conn: conn} do
+      data_dir = Path.join(System.tmp_dir!(), "create-ok-#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf!(data_dir) end)
+      Application.put_env(:allay, :data_dir, data_dir)
+      on_exit(fn -> Application.put_env(:allay, :data_dir, "data") end)
+
+      JavaRegistry.put(%{21 => "/fake/java21/bin/java"})
+      on_exit(fn -> JavaRegistry.put(%{}) end)
+
+      Req.Test.stub(Allay.Minecraft.APIStub, fn c ->
+        case c.host do
+          "launchermeta.mojang.com" -> Req.Test.json(c, @manifest)
+          "piston-meta.example" -> Req.Test.json(c, @meta)
+          "piston-data.example" -> Plug.Conn.send_resp(c, 200, "PK fake jar")
+        end
+      end)
+
+      conn =
+        post(conn, ~p"/api/servers", %{
+          "name" => "Fresh",
+          "type" => "vanilla",
+          "version" => "1.21.11",
+          "port" => 25_565
+        })
+
+      assert %{"server" => wire} = json_response(conn, 201)
+      assert MapSet.new(Map.keys(wire)) == MapSet.new(@wire_keys)
+      assert wire["name"] == "Fresh"
+      assert wire["port"] == 25_565
+      assert wire["status"] == %{"state" => "stopped"}
+    end
+
     test "400 VALIDATION_ERROR with details on invalid body", %{conn: conn} do
       conn = post(conn, ~p"/api/servers", %{"name" => "", "type" => "vanilla"})
       assert %{"code" => "VALIDATION_ERROR", "details" => _} = json_response(conn, 400)

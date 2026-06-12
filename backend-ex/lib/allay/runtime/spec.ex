@@ -14,6 +14,9 @@ defmodule Allay.Runtime.Spec do
     :rcon_port,
     :rcon_password
   ]
+
+  # rcon_password is a secret; keep it out of inspect/log output.
+  @derive {Inspect, except: [:rcon_password]}
   defstruct @enforce_keys ++
               [
                 jvm_args: "",

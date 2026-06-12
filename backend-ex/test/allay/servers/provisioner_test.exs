@@ -171,15 +171,14 @@ defmodule Allay.Servers.ProvisionerTest do
       refute File.exists?(Path.join(data_dir, "servers"))
     end
 
-    test "DB uniqueness race cleans up the created directory", %{data_dir: data_dir} do
+    test "DB uniqueness race maps to :port_in_use and cleans up the created directory",
+         %{data_dir: data_dir} do
       stub_minecraft()
       # Pre-existing row holding port 25565 forces the Multi insert to fail.
       server_fixture(%{port: 25_565, rcon_port: 99_565})
 
-      assert {:error, %Ecto.Changeset{} = changeset} =
+      assert {:error, :port_in_use} =
                Provisioner.provision(scope(), valid_attrs(%{port: 25_565}), data_dir: data_dir)
-
-      assert "has already been taken" in errors_on(changeset).port
 
       # No orphan directory left behind.
       assert File.ls!(Path.join(data_dir, "servers")) == []

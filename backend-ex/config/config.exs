@@ -30,6 +30,10 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Redact secrets from logged request params (the socket connect token must
+# never reach production logs).
+config :phoenix, :filter_parameters, ["password", "token"]
+
 config :allay, :minecraft_req_options, []
 
 config :allay, :data_dir, "data"

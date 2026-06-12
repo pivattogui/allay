@@ -25,7 +25,8 @@ defmodule Allay.Servers.Provisioner do
   @doc """
   Provisions a new server from `attrs`.
 
-  Returns `{:ok, server}` on success, `{:error, changeset}` for validation or
+  Returns `{:ok, server}` on success, `{:error, :port_in_use}` for a duplicate
+  port (unique-constraint race), `{:error, changeset}` for other validation or
   DB-constraint failures, or a tagged tuple (`:java_lookup_failed`,
   `:java_runtime_unavailable`, `:provision_failed`) for pipeline failures.
 
@@ -111,11 +112,26 @@ defmodule Allay.Servers.Provisioner do
 
       {:error, :server, changeset, _changes} ->
         File.rm_rf(directory)
-        {:error, changeset}
+        remap_port_constraint(changeset)
 
       {:error, _step, reason, _changes} ->
         File.rm_rf(directory)
         {:error, {:provision_failed, inspect(reason)}}
+    end
+  end
+
+  # A unique-constraint violation on port surfaces as a changeset error keyed
+  # :port; translate it to the typed :port_in_use the FallbackController maps
+  # to 409 PORT_IN_USE (distinct from a 400 VALIDATION_ERROR).
+  defp remap_port_constraint(%Ecto.Changeset{errors: errors} = changeset) do
+    case errors[:port] do
+      {_msg, opts} ->
+        if Keyword.get(opts, :constraint) == :unique,
+          do: {:error, :port_in_use},
+          else: {:error, changeset}
+
+      _ ->
+        {:error, changeset}
     end
   end
 
