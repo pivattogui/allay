@@ -1,6 +1,9 @@
 defmodule Allay.Servers.Server do
   use Ecto.Schema
+
   import Ecto.Changeset
+
+  alias Crontab.CronExpression.Parser
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -101,6 +104,22 @@ defmodule Allay.Servers.Server do
     |> validate_number(:ram_max_mb, greater_than_or_equal_to: 512, less_than_or_equal_to: 32_768)
     |> validate_number(:restart_limit, greater_than_or_equal_to: 0, less_than_or_equal_to: 10)
     |> validate_ram_order_with_existing(server)
+    |> validate_restart_schedule()
+  end
+
+  # Cron-validates restart_schedule (delta 1): legacy stored arbitrary strings
+  # that silently never fired. nil clears the schedule and skips validation.
+  defp validate_restart_schedule(changeset) do
+    case get_change(changeset, :restart_schedule) do
+      nil ->
+        changeset
+
+      schedule ->
+        case Parser.parse(schedule) do
+          {:ok, _} -> changeset
+          {:error, _} -> add_error(changeset, :restart_schedule, "is not a valid cron expression")
+        end
+    end
   end
 
   # Checks that the port falls within the configured MC range.

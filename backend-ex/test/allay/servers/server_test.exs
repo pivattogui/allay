@@ -269,4 +269,39 @@ defmodule Allay.Servers.ServerTest do
       assert cs.valid?
     end
   end
+
+  # ── config_changeset — restart_schedule cron validation ─────────────────────
+
+  describe "config_changeset/2 — restart_schedule" do
+    for preset <- ["0 0 * * *", "0 4 * * *", "0 0 * * 0", "0 0 1 * *"] do
+      test "accepts UI preset #{preset}" do
+        cs =
+          Server.config_changeset(%Server{ram_min_mb: 1024, ram_max_mb: 2048}, %{
+            restart_schedule: unquote(preset)
+          })
+
+        assert cs.valid?
+      end
+    end
+
+    test "rejects a non-cron string" do
+      cs =
+        Server.config_changeset(%Server{ram_min_mb: 1024, ram_max_mb: 2048}, %{
+          restart_schedule: "every day at noon"
+        })
+
+      assert %{restart_schedule: ["is not a valid cron expression"]} = errors_on(cs)
+    end
+
+    test "nil clears the schedule and passes" do
+      cs =
+        Server.config_changeset(
+          %Server{ram_min_mb: 1024, ram_max_mb: 2048, restart_schedule: "0 0 * * *"},
+          %{restart_schedule: nil}
+        )
+
+      assert cs.valid?
+      assert get_field(cs, :restart_schedule) == nil
+    end
+  end
 end
