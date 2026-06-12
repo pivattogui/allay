@@ -34,6 +34,8 @@ config :allay, :minecraft_req_options, []
 
 config :allay, :data_dir, "data"
 
+config :allay, :mc_port_range, 25_565..25_575
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

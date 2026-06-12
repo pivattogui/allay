@@ -26,6 +26,13 @@ if data_dir = System.get_env("DATA_DIR") do
   config :allay, :data_dir, data_dir
 end
 
+mc_port_min = System.get_env("MC_PORT_MIN")
+mc_port_max = System.get_env("MC_PORT_MAX")
+
+if mc_port_min && mc_port_max do
+  config :allay, :mc_port_range, String.to_integer(mc_port_min)..String.to_integer(mc_port_max)
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
