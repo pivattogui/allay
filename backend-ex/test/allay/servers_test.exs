@@ -228,4 +228,75 @@ defmodule Allay.ServersTest do
       assert {:error, :not_found} = Servers.get_server(sc, srv.id)
     end
   end
+
+  describe "update_server/3" do
+    test "updates editable fields and returns the row" do
+      sc = scope()
+      srv = server_fixture(%{name: "Old"})
+
+      assert {:ok, updated} = Servers.update_server(sc, srv.id, %{"name" => "New"})
+      assert updated.name == "New"
+    end
+
+    test "returns not_found for unknown id" do
+      assert {:error, :not_found} = Servers.update_server(scope(), Ecto.UUID.generate(), %{})
+    end
+
+    test "maps a duplicate port to port_in_use" do
+      sc = scope()
+      taken = server_fixture(%{port: 25_565, rcon_port: 35_565})
+      srv = server_fixture(%{port: 25_566, rcon_port: 35_566})
+
+      assert {:error, :port_in_use} = Servers.update_server(sc, srv.id, %{"port" => taken.port})
+    end
+
+    test "returns a changeset on invalid input" do
+      sc = scope()
+      srv = server_fixture()
+      long_name = String.duplicate("a", 51)
+
+      assert {:error, %Ecto.Changeset{}} =
+               Servers.update_server(sc, srv.id, %{"name" => long_name})
+    end
+
+    test "syncs server.properties when the port changes" do
+      sc = scope()
+      dir = Path.join(System.tmp_dir!(), "upd-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "server.properties"), "server-port=25565\nmotd=hi\n")
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      srv = server_fixture(%{port: 25_565, rcon_port: 35_565, directory: dir})
+
+      assert {:ok, _} = Servers.update_server(sc, srv.id, %{"port" => 25_566})
+      content = File.read!(Path.join(dir, "server.properties"))
+      assert content =~ "server-port=25566"
+      assert content =~ "motd=hi"
+    end
+  end
+
+  describe "update_server_config/3" do
+    test "returns {:ok, server, needs_restart} with needs_restart false when stopped" do
+      sc = scope()
+      srv = server_fixture()
+
+      assert {:ok, updated, false} =
+               Servers.update_server_config(sc, srv.id, %{"jvm_args" => "-XX:+UseZGC"})
+
+      assert updated.jvm_args == "-XX:+UseZGC"
+    end
+
+    test "returns not_found for unknown id" do
+      assert {:error, :not_found} =
+               Servers.update_server_config(scope(), Ecto.UUID.generate(), %{})
+    end
+
+    test "returns a changeset on invalid restart_limit" do
+      sc = scope()
+      srv = server_fixture()
+
+      assert {:error, %Ecto.Changeset{}} =
+               Servers.update_server_config(sc, srv.id, %{"restart_limit" => 99})
+    end
+  end
 end

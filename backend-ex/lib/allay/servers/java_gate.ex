@@ -51,5 +51,6 @@ defmodule Allay.Servers.JavaGate do
   end
 
   defp type_atom(type) when is_atom(type), do: type
-  defp type_atom(type) when is_binary(type), do: String.to_existing_atom(type)
+  defp type_atom("vanilla"), do: :vanilla
+  defp type_atom("paper"), do: :paper
 end

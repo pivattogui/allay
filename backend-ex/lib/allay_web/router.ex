@@ -29,6 +29,38 @@ defmodule AllayWeb.Router do
     get "/me", AuthController, :me
   end
 
+  scope "/api/servers", AllayWeb do
+    pipe_through [:api, :authenticated]
+
+    get "/", ServerController, :index
+    post "/", ServerController, :create
+    get "/:id", ServerController, :show
+    patch "/:id", ServerController, :update
+    delete "/:id", ServerController, :delete
+
+    get "/:id/config", ServerConfigController, :show
+    patch "/:id/config", ServerConfigController, :update
+
+    post "/:id/start", ServerLifecycleController, :start
+    post "/:id/stop", ServerLifecycleController, :stop
+    post "/:id/kill", ServerLifecycleController, :kill
+    post "/:id/command", ServerLifecycleController, :command
+    get "/:id/logs", ServerLifecycleController, :logs
+    get "/:id/status", ServerLifecycleController, :status
+
+    post "/:id/icon", ServerIconController, :create
+    get "/:id/icon", ServerIconController, :show
+    delete "/:id/icon", ServerIconController, :delete
+  end
+
+  scope "/api/system", AllayWeb do
+    pipe_through [:api, :authenticated]
+
+    get "/server-types", SystemController, :server_types
+    get "/versions/:type", SystemController, :versions
+    get "/info", SystemController, :info
+  end
+
   # Enable LiveDashboard in development
   if Application.compile_env(:allay, :dev_routes) do
     # If you want to use the LiveDashboard in production, you should put

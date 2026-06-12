@@ -7,6 +7,7 @@ defmodule Allay.Servers do
   import Ecto.Query
 
   alias Allay.Accounts.Scope
+  alias Allay.Minecraft.Properties
   alias Allay.Repo
   alias Allay.Runtime
   alias Allay.Servers.Provisioner
@@ -49,6 +50,98 @@ defmodule Allay.Servers do
   """
   def create_server(%Scope{} = scope, attrs, opts \\ []) do
     Provisioner.provision(scope, attrs, opts)
+  end
+
+  @doc """
+  Updates a server's editable fields (name, port, ram, flags). On a port
+  change, syncs `server-port` in the on-disk `server.properties` file (legacy
+  PATCH /:id parity).
+
+  Returns `{:ok, server}`, `{:error, :not_found}`, `{:error, :port_in_use}` for
+  a duplicate port, or `{:error, changeset}` for validation failures.
+  """
+  def update_server(%Scope{} = scope, id, attrs) do
+    with {:ok, server} <- get_server(scope, id),
+         changeset = Server.update_changeset(server, attrs),
+         {:ok, updated} <- persist(changeset) do
+      sync_port_properties(server, updated)
+      {:ok, updated}
+    end
+  end
+
+  @doc """
+  Updates a server's config fields (name, ram, jvm_args, java_path, flags,
+  restart_limit, restart_schedule). Returns `{:ok, server, needs_restart}`.
+
+  `needs_restart` is true only when the server is running AND one of ram,
+  jvm_args, or java_path changed (legacy PATCH /:id/config parity).
+  """
+  def update_server_config(%Scope{} = scope, id, attrs) do
+    with {:ok, server} <- get_server(scope, id),
+         changeset = Server.config_changeset(server, attrs),
+         {:ok, updated} <- persist(changeset) do
+      # Plan 5: restart_scheduler live re-registration on restart_schedule change.
+      {:ok, updated, needs_restart?(id, changeset)}
+    end
+  end
+
+  @doc """
+  Persists the server's `icon_path` column. Pass `nil` to clear it. The
+  on-disk icon file is managed by the caller (controller). Returns `:ok`.
+  """
+  def set_icon_path(%Scope{} = scope, id, icon_path) do
+    with {:ok, server} <- get_server(scope, id) do
+      server
+      |> Ecto.Changeset.change(icon_path: icon_path)
+      |> Repo.update()
+      |> case do
+        {:ok, _} -> :ok
+        {:error, changeset} -> {:error, changeset}
+      end
+    end
+  end
+
+  defp persist(changeset) do
+    case Repo.update(changeset) do
+      {:ok, server} -> {:ok, server}
+      {:error, changeset} -> map_changeset_error(changeset)
+    end
+  end
+
+  # A unique_constraint violation on port surfaces as a changeset error keyed
+  # :port; translate it to the typed :port_in_use the FallbackController maps
+  # to 409 PORT_IN_USE (distinct from a 400 VALIDATION_ERROR).
+  defp map_changeset_error(%Ecto.Changeset{errors: errors} = changeset) do
+    case errors[:port] do
+      {_msg, opts} ->
+        if Keyword.get(opts, :constraint) == :unique,
+          do: {:error, :port_in_use},
+          else: {:error, changeset}
+
+      _ ->
+        {:error, changeset}
+    end
+  end
+
+  defp sync_port_properties(%Server{port: old_port}, %Server{port: new_port})
+       when old_port == new_port,
+       do: :ok
+
+  defp sync_port_properties(_old, %Server{directory: directory, port: new_port}) do
+    path = Path.join(directory, "server.properties")
+
+    case File.read(path) do
+      {:ok, raw} -> File.write(path, Properties.put_key(raw, "server-port", new_port))
+      {:error, _} -> :ok
+    end
+  end
+
+  @restart_keys [:ram_min_mb, :ram_max_mb, :jvm_args, :java_path]
+
+  defp needs_restart?(id, changeset) do
+    running? = Runtime.status(id).state == :running
+    touched_runtime? = Enum.any?(@restart_keys, &Map.has_key?(changeset.changes, &1))
+    running? and touched_runtime?
   end
 
   @doc """

@@ -57,6 +57,7 @@ defmodule Allay.MixProject do
       {:bandit, "~> 1.5"},
       {:bcrypt_elixir, "~> 3.2"},
       {:req, "~> 0.5"},
+      {:image, "~> 0.54"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
