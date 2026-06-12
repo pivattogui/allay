@@ -156,6 +156,109 @@ defmodule Allay.Backups do
     end
   end
 
+  @doc """
+  Restores a server's directory from a backup archive using the legacy
+  rename-aside rollback: the live directory is moved to a `_pre_restore_`
+  sibling (never deleted), the archive is extracted into the parent, the
+  server jar is reseeded from the set-aside copy (archives exclude jars), and
+  the set-aside copy is removed. On any failure the partial restore is wiped
+  and the set-aside directory is renamed back, leaving the original intact.
+
+  `opts` accepts `:data_dir` and `:runtime` (test seams). Guards:
+  `{:error, :backup_not_found}`, `{:error, :not_found}` (server),
+  `{:error, :server_running}` when running/starting,
+  `{:error, :backup_file_not_found}`, `{:error, {:restore_failed, reason}}`.
+  """
+  def restore_backup(%Scope{} = scope, server_id, backup_id, opts \\ []) do
+    runtime = Keyword.get(opts, :runtime, Runtime)
+
+    with {:ok, backup} <- get_backup(scope, server_id, backup_id),
+         {:ok, server} <- Servers.get_server(scope, server_id),
+         :ok <- ensure_not_running(runtime, server_id),
+         archive_path = archive_path(backup, opts),
+         :ok <- ensure_file_exists(archive_path) do
+      run_restore(server, archive_path)
+    end
+  end
+
+  @doc """
+  Deletes a backup: unlinks the archive file (if present) and the row. No
+  state guard (legacy parity). Returns `:ok` or `{:error, :backup_not_found}`.
+  """
+  def delete_backup(%Scope{} = scope, server_id, backup_id, opts \\ []) do
+    with {:ok, backup} <- get_backup(scope, server_id, backup_id) do
+      File.rm(archive_path(backup, opts))
+      {:ok, _} = Repo.delete(backup)
+      :ok
+    end
+  end
+
+  @doc """
+  Resolves the on-disk archive path and filename for a backup, for the
+  download controller. Returns `{:ok, path, filename}`,
+  `{:error, :backup_not_found}`, or `{:error, :backup_file_not_found}`.
+  """
+  def backup_file_path(%Scope{} = scope, server_id, backup_id, opts \\ []) do
+    with {:ok, backup} <- get_backup(scope, server_id, backup_id),
+         path = archive_path(backup, opts),
+         :ok <- ensure_file_exists(path) do
+      {:ok, path, backup.filename}
+    end
+  end
+
+  defp ensure_not_running(runtime, server_id) do
+    if runtime.status(server_id).state in [:running, :starting],
+      do: {:error, :server_running},
+      else: :ok
+  end
+
+  defp ensure_file_exists(path) do
+    if File.exists?(path), do: :ok, else: {:error, :backup_file_not_found}
+  end
+
+  # The archive's top-level folder is the directory basename AT BACKUP TIME;
+  # same server, same dir, so it lands back exactly where it was renamed from.
+  defp run_restore(server, archive_path) do
+    directory = server.directory
+    parent = Path.dirname(directory)
+    pre_restore = "#{directory}_pre_restore_#{System.system_time(:millisecond)}"
+
+    if File.exists?(directory), do: File.rename!(directory, pre_restore)
+
+    try do
+      case System.cmd("tar", ["-xzf", archive_path, "-C", parent], stderr_to_stdout: true) do
+        {_output, 0} ->
+          reseed_jar(pre_restore, directory)
+          File.rm_rf(pre_restore)
+          :ok
+
+        {output, _code} ->
+          rollback(directory, pre_restore)
+          {:error, {:restore_failed, output}}
+      end
+    rescue
+      error ->
+        rollback(directory, pre_restore)
+        {:error, {:restore_failed, Exception.message(error)}}
+    end
+  end
+
+  defp reseed_jar(pre_restore, directory) do
+    jar = Path.join(pre_restore, "server.jar")
+    if File.exists?(jar), do: File.cp!(jar, Path.join(directory, "server.jar"))
+  end
+
+  defp rollback(directory, pre_restore) do
+    if File.exists?(pre_restore) do
+      File.rm_rf(directory)
+      File.rename!(pre_restore, directory)
+    end
+  end
+
+  defp archive_path(%Backup{filename: filename}, opts) do
+    Path.join([data_dir(opts), "backups", filename])
+  end
+
   # Retention runs after a successful create. No config row → skip entirely
   # (legacy parity). Otherwise keep `max_backups` (||10) newest rows of ANY
   # status/type; per-item failures are swallowed so one bad unlink can't strand

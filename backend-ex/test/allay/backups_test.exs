@@ -334,4 +334,171 @@ defmodule Allay.BackupsTest do
       assert {:error, :not_found} = Backups.update_config(scope, Ecto.UUID.generate(), %{})
     end
   end
+
+  describe "restore_backup/3" do
+    test "restores archived content, drops live-only changes and reseeds the jar" do
+      {scope, server, data_dir} = seed_server()
+      {:ok, backup} = Backups.create_backup(scope, server.id, "manual", data_dir: data_dir)
+
+      jar_bytes = File.read!(Path.join(server.directory, "server.jar"))
+
+      # Mutate the live directory AFTER the backup: add a marker, delete a
+      # world file. The restore must undo both.
+      File.write!(Path.join(server.directory, "MARKER"), "live-only")
+      File.rm!(Path.join([server.directory, "world", "level.dat"]))
+
+      assert :ok = Backups.restore_backup(scope, server.id, backup.id, data_dir: data_dir)
+
+      assert File.read!(Path.join([server.directory, "world", "level.dat"])) == "level-data"
+      refute File.exists?(Path.join(server.directory, "MARKER"))
+      # Jar is excluded from archives but reseeded from the set-aside copy.
+      assert File.read!(Path.join(server.directory, "server.jar")) == jar_bytes
+
+      # No pre_restore leftovers in the parent.
+      parent = Path.dirname(server.directory)
+      leftovers = parent |> File.ls!() |> Enum.filter(&String.contains?(&1, "_pre_restore_"))
+      assert leftovers == []
+    end
+
+    test "refuses to restore while the server is running or starting" do
+      {scope, server, data_dir} = seed_server()
+      {:ok, backup} = Backups.create_backup(scope, server.id, "manual", data_dir: data_dir)
+
+      runtime = StubRuntime.install(:running)
+
+      assert {:error, :server_running} =
+               Backups.restore_backup(scope, server.id, backup.id,
+                 data_dir: data_dir,
+                 runtime: runtime
+               )
+
+      StubRuntime.install(:starting)
+
+      assert {:error, :server_running} =
+               Backups.restore_backup(scope, server.id, backup.id,
+                 data_dir: data_dir,
+                 runtime: StubRuntime
+               )
+    end
+
+    test "unknown backup yields :backup_not_found" do
+      {scope, server, data_dir} = seed_server()
+
+      assert {:error, :backup_not_found} =
+               Backups.restore_backup(scope, server.id, Ecto.UUID.generate(), data_dir: data_dir)
+    end
+
+    test "missing archive file yields :backup_file_not_found" do
+      {scope, server, data_dir} = seed_server()
+
+      backup =
+        Repo.insert!(%Backup{
+          server_id: server.id,
+          filename: "#{server.id}_ghost.tar.gz",
+          type: "manual",
+          status: "completed"
+        })
+
+      assert {:error, :backup_file_not_found} =
+               Backups.restore_backup(scope, server.id, backup.id, data_dir: data_dir)
+    end
+
+    test "a corrupt archive rolls the original directory back intact" do
+      {scope, server, data_dir} = seed_server()
+
+      # A real, completed backup row whose file is garbage (tar -xzf fails).
+      backups_dir = Path.join(data_dir, "backups")
+      File.mkdir_p!(backups_dir)
+      filename = "#{server.id}_corrupt.tar.gz"
+      File.write!(Path.join(backups_dir, filename), "not a real gzip stream")
+
+      backup =
+        Repo.insert!(%Backup{
+          server_id: server.id,
+          filename: filename,
+          type: "manual",
+          status: "completed"
+        })
+
+      before = dir_snapshot(server.directory)
+
+      assert {:error, {:restore_failed, _reason}} =
+               Backups.restore_backup(scope, server.id, backup.id, data_dir: data_dir)
+
+      assert dir_snapshot(server.directory) == before
+
+      parent = Path.dirname(server.directory)
+      leftovers = parent |> File.ls!() |> Enum.filter(&String.contains?(&1, "_pre_restore_"))
+      assert leftovers == []
+    end
+  end
+
+  describe "delete_backup/3" do
+    test "removes the archive file and the row" do
+      {scope, server, data_dir} = seed_server()
+      {:ok, backup} = Backups.create_backup(scope, server.id, "manual", data_dir: data_dir)
+      archive_path = Path.join([data_dir, "backups", backup.filename])
+      assert File.exists?(archive_path)
+
+      assert :ok = Backups.delete_backup(scope, server.id, backup.id, data_dir: data_dir)
+
+      refute File.exists?(archive_path)
+      assert {:error, :backup_not_found} = Backups.get_backup(scope, server.id, backup.id)
+    end
+
+    test "unknown backup yields :backup_not_found" do
+      {scope, server, data_dir} = seed_server()
+
+      assert {:error, :backup_not_found} =
+               Backups.delete_backup(scope, server.id, Ecto.UUID.generate(), data_dir: data_dir)
+    end
+  end
+
+  describe "backup_file_path/3" do
+    test "returns the archive path and filename for an existing backup" do
+      {scope, server, data_dir} = seed_server()
+      {:ok, backup} = Backups.create_backup(scope, server.id, "manual", data_dir: data_dir)
+
+      assert {:ok, path, filename} =
+               Backups.backup_file_path(scope, server.id, backup.id, data_dir: data_dir)
+
+      assert filename == backup.filename
+      assert path == Path.join([data_dir, "backups", backup.filename])
+      assert File.exists?(path)
+    end
+
+    test "missing file yields :backup_file_not_found" do
+      {scope, server, data_dir} = seed_server()
+
+      backup =
+        Repo.insert!(%Backup{
+          server_id: server.id,
+          filename: "#{server.id}_ghost.tar.gz",
+          type: "manual",
+          status: "completed"
+        })
+
+      assert {:error, :backup_file_not_found} =
+               Backups.backup_file_path(scope, server.id, backup.id, data_dir: data_dir)
+    end
+
+    test "unknown backup yields :backup_not_found" do
+      {scope, server, data_dir} = seed_server()
+
+      assert {:error, :backup_not_found} =
+               Backups.backup_file_path(scope, server.id, Ecto.UUID.generate(),
+                 data_dir: data_dir
+               )
+    end
+  end
+
+  # Recursively snapshots a directory's relative file paths and contents so a
+  # rollback can be asserted byte-for-byte.
+  defp dir_snapshot(dir) do
+    dir
+    |> Path.join("**")
+    |> Path.wildcard(match_dot: true)
+    |> Enum.filter(&File.regular?/1)
+    |> Map.new(fn path -> {Path.relative_to(path, dir), File.read!(path)} end)
+  end
 end
