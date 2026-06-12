@@ -5,7 +5,11 @@ defmodule AllayWeb.ServerMigrateControllerTest do
   import Allay.ServersFixtures
 
   alias Allay.Accounts
+  alias Allay.Runtime
+  alias Allay.Runtime.FakeRcon
   alias Allay.Servers.JavaRegistry
+
+  @fake_java Path.expand("../../support/fake_java.sh", __DIR__)
 
   @jar_bytes "PK fake new jar bytes"
 
@@ -136,6 +140,51 @@ defmodule AllayWeb.ServerMigrateControllerTest do
         })
 
       assert %{"code" => "SERVER_NOT_FOUND"} = json_response(conn, 404)
+    end
+
+    test "409 SERVER_RUNNING with the migration-specific message while running", %{
+      conn: conn,
+      data_dir: data_dir
+    } do
+      {:ok, _} = FakeRcon.start_registry()
+      rcon_port = System.unique_integer([:positive])
+
+      server =
+        seeded_server(data_dir, %{
+          java_path: @fake_java,
+          java_version: "21",
+          rcon_port: rcon_port,
+          rcon_password: "pw"
+        })
+
+      on_exit(fn -> Runtime.remove_instance(server.id) end)
+
+      start_opts = [
+        env: [{"FAKE_BEHAVIOR", "ok"}],
+        spec_overrides: [
+          rcon_mod: FakeRcon,
+          startup_timeout_ms: 2_000,
+          stop_timeout_ms: 300,
+          term_timeout_ms: 300,
+          respawn_delay_ms: 50
+        ]
+      ]
+
+      Runtime.subscribe(server.id)
+      {:ok, _} = Allay.Servers.start_server(Accounts.Scope.system(), server.id, start_opts)
+      FakeRcon.set(rcon_port, %{ready?: true})
+      assert_receive %Allay.Runtime.Event{type: :status, data: %{state: :running}}, 3_000
+
+      conn =
+        post(conn, ~p"/api/servers/#{server.id}/migrate", %{
+          "type" => "vanilla",
+          "version" => "1.21.11"
+        })
+
+      assert %{
+               "code" => "SERVER_RUNNING",
+               "error" => "Server must be stopped before migration"
+             } = json_response(conn, 409)
     end
 
     test "500 JAR_DOWNLOAD_FAILED when the jar can't be fetched", %{

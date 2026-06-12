@@ -400,9 +400,9 @@ defmodule Allay.Servers do
 
   Returns `{:ok, %{backup_id, migration: %{from_type, from_version, to_type,
   to_version}}}` with the PRE-update values, or one of `{:error,
-  :invalid_server_type}`, `{:error, :not_found}`, `{:error, :server_running}`,
-  the java-gate error tuples, `{:error, {:backup_failed, _}}`, or `{:error,
-  {:jar_download_failed, message}}`.
+  :invalid_server_type}`, `{:error, :not_found}`,
+  `{:error, :migration_server_running}`, the java-gate error tuples, `{:error,
+  {:backup_failed, _}}`, or `{:error, {:jar_download_failed, message}}`.
   """
   def migrate_server(%Scope{} = scope, id, type, version, opts \\ []) do
     runtime = Keyword.get(opts, :runtime, Runtime)
@@ -412,8 +412,8 @@ defmodule Allay.Servers do
          :ok <- ensure_migratable(runtime, server.id),
          {:ok, major} <- JavaGate.assert_available(type, version),
          {:ok, backup} <- create_migration_backup(scope, server.id, opts),
-         {:ok, jar_path} <- fetch_migration_jar(type, version, opts) do
-      swap_server_jar(server.directory, jar_path)
+         {:ok, jar_path} <- fetch_migration_jar(type, version, opts),
+         :ok <- swap_server_jar(server.directory, jar_path) do
       {:ok, _updated} = update_migrated_row(server, type, version, major)
 
       {:ok,
@@ -434,7 +434,7 @@ defmodule Allay.Servers do
 
   defp ensure_migratable(runtime, id) do
     if runtime.status(id).state in @active_states,
-      do: {:error, :server_running},
+      do: {:error, :migration_server_running},
       else: :ok
   end
 
@@ -456,10 +456,22 @@ defmodule Allay.Servers do
   end
 
   # No rollback (legacy parity): unlink the old jar, then copy the new one in.
+  # rm/cp failures surface as the same typed tuple as a failed download — the
+  # pre-migration backup is the recovery path either way.
   defp swap_server_jar(directory, jar_path) do
     server_jar = Path.join(directory, "server.jar")
-    if File.exists?(server_jar), do: File.rm!(server_jar)
-    File.cp!(jar_path, server_jar)
+
+    with :ok <- remove_existing_jar(server_jar),
+         :ok <- File.cp(jar_path, server_jar) do
+      :ok
+    else
+      {:error, reason} ->
+        {:error, {:jar_download_failed, "Failed to swap server.jar: #{inspect(reason)}"}}
+    end
+  end
+
+  defp remove_existing_jar(server_jar) do
+    if File.exists?(server_jar), do: File.rm(server_jar), else: :ok
   end
 
   defp update_migrated_row(server, type, version, major) do

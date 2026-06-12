@@ -255,8 +255,10 @@ defmodule Allay.Backups do
     end
   end
 
+  # Path.basename strips any directory components from the stored filename —
+  # defense-in-depth against traversal, even though filenames are system-generated.
   defp archive_path(%Backup{filename: filename}, opts) do
-    Path.join([data_dir(opts), "backups", filename])
+    Path.join([data_dir(opts), "backups", Path.basename(filename)])
   end
 
   # Retention runs after a successful create. No config row → skip entirely

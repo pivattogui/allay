@@ -32,7 +32,9 @@ config :phoenix,
 
 config :bcrypt_elixir, :log_rounds, 1
 
-config :allay, :minecraft_req_options, plug: {Req.Test, Allay.Minecraft.APIStub}
+# `retry: false` skips Req's default 5xx exponential backoff — the upstream-error
+# paths (FETCH_VERSIONS_FAILED, jar-download 500) should fail fast in tests.
+config :allay, :minecraft_req_options, plug: {Req.Test, Allay.Minecraft.APIStub}, retry: false
 
 # Boot.run starts auto_start servers from the DB at app boot. In test, the
 # sandbox owns the connection per-test, so skip it entirely; boot is tested

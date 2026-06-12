@@ -117,7 +117,7 @@ defmodule Allay.Servers.MigrateTest do
       server = seeded_server(data_dir)
       runtime = StubRuntime.install(:running)
 
-      assert {:error, :server_running} =
+      assert {:error, :migration_server_running} =
                Servers.migrate_server(scope(), server.id, "paper", "1.21.11",
                  data_dir: data_dir,
                  runtime: runtime
@@ -129,7 +129,7 @@ defmodule Allay.Servers.MigrateTest do
       server = seeded_server(data_dir)
       runtime = StubRuntime.install(:starting)
 
-      assert {:error, :server_running} =
+      assert {:error, :migration_server_running} =
                Servers.migrate_server(scope(), server.id, "paper", "1.21.11",
                  data_dir: data_dir,
                  runtime: runtime
@@ -143,7 +143,7 @@ defmodule Allay.Servers.MigrateTest do
       server = seeded_server(data_dir)
       runtime = StubRuntime.install(:running)
 
-      assert {:error, :server_running} =
+      assert {:error, :migration_server_running} =
                Servers.migrate_server(scope(), server.id, "paper", "1.21.11",
                  data_dir: data_dir,
                  runtime: runtime

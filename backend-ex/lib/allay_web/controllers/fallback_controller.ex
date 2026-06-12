@@ -144,8 +144,24 @@ defmodule AllayWeb.FallbackController do
     )
   end
 
-  def call(conn, {:error, {:backup_failed, _output}}) do
-    error(conn, :internal_server_error, "Failed to create backup", "BACKUP_FAILED")
+  # Migration shares the SERVER_RUNNING code but carries its own legacy message.
+  def call(conn, {:error, :migration_server_running}) do
+    error(
+      conn,
+      :conflict,
+      "Server must be stopped before migration",
+      "SERVER_RUNNING"
+    )
+  end
+
+  def call(conn, {:error, {:backup_failed, output}}) do
+    conn
+    |> put_status(:internal_server_error)
+    |> json(%{
+      error: "Failed to create backup",
+      code: "BACKUP_FAILED",
+      details: to_string(output)
+    })
   end
 
   def call(conn, {:error, {:restore_failed, _reason}}) do
