@@ -67,6 +67,21 @@ defmodule Allay.Runtime.MetricsSamplerTest do
     assert_receive %Event{type: :metrics, data: %{player_count: 3, player_max: 50}}, 1_000
   end
 
+  test "max-players config line updates player_max without an immediate broadcast", %{
+    server_id: id
+  } do
+    start_sampler!(id, interval_ms: 60_000)
+    assert_receive %Event{type: :metrics, data: %{player_max: 20}}, 1_000
+
+    Event.broadcast(id, :log, log_line("max-players=50"))
+    # max-players only updates state; it does not broadcast on its own (unlike
+    # list/join/leave). The new max surfaces on the next list output.
+    refute_receive %Event{type: :metrics}, 200
+
+    Event.broadcast(id, :log, log_line("There are 1 of a max of 50 players online: a"))
+    assert_receive %Event{type: :metrics, data: %{player_max: 50}}, 1_000
+  end
+
   test "dead pid stops broadcasting", %{server_id: id} do
     start_sampler!(id, ps_fun: fn _ -> {:error, :dead} end)
     refute_receive %Event{type: :metrics}, 300

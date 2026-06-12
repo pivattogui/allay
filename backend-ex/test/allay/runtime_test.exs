@@ -98,9 +98,40 @@ defmodule Allay.RuntimeTest do
            end)
   end
 
+  test "logs default returns at most 100 lines", ctx do
+    start_running!(ctx)
+    log_path = Path.join([ctx.dir, "logs", "latest.log"])
+
+    lines = for i <- 1..150, do: "[12:00:00 INFO]: line-#{i}"
+    File.write!(log_path, Enum.join(lines, "\n") <> "\n", [:append])
+
+    assert eventually(fn -> length(Runtime.logs(ctx.server_id)) == 100 end)
+  end
+
   test "duplicate start while running returns already_running", ctx do
     start_running!(ctx)
     assert {:error, :already_running} = Runtime.start_server(ctx.spec, [{"FAKE_BEHAVIOR", "ok"}])
+  end
+
+  test "concurrent starts never leak a raw already_started tuple", ctx do
+    parent = self()
+
+    for _ <- 1..2 do
+      spawn(fn ->
+        send(parent, {:start_result, Runtime.start_server(ctx.spec, [{"FAKE_BEHAVIOR", "ok"}])})
+      end)
+    end
+
+    results =
+      for _ <- 1..2 do
+        assert_receive {:start_result, result}, 3_000
+        result
+      end
+
+    for result <- results do
+      assert match?({:ok, pid} when is_pid(pid), result) or result == {:error, :already_running},
+             "unexpected start result: #{inspect(result)}"
+    end
   end
 
   test "start replaces a crashed instance", ctx do

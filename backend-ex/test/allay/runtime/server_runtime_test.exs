@@ -150,6 +150,52 @@ defmodule Allay.Runtime.ServerRuntimeTest do
     assert %{state: :crashed} = ServerRuntime.status(pid)
   end
 
+  test "stop cancels a pending respawn after a crash", ctx do
+    crash_file = Path.join(ctx.dir, "crash-trigger")
+
+    spec = %{
+      ctx.spec
+      | auto_restart: %{enabled?: true, limit: 3, window_ms: 60_000},
+        rcon_probe_ms: 100,
+        respawn_delay_ms: 500
+    }
+
+    pid = start_runtime!(spec, [{"FAKE_BEHAVIOR", "ok"}, {"FAKE_CRASH_FILE", crash_file}])
+
+    FakeRcon.set(ctx.rcon_port, %{ready?: true})
+    assert_receive %Event{type: :status, data: %{state: :starting, last_error: nil}}, 1_000
+    assert_receive %Event{type: :status, data: %{state: :running}}, 3_000
+
+    File.touch!(crash_file)
+    assert_receive %Event{type: :status, data: %{state: :crashed}}, 3_000
+    File.rm!(crash_file)
+
+    # User stops the crashed server before the scheduled respawn fires.
+    assert :ok = ServerRuntime.stop(pid)
+    refute_receive %Event{type: :status, data: %{state: :starting}}, 1_500
+    assert %{state: :crashed} = ServerRuntime.status(pid)
+  end
+
+  test "auto_restart disabled means a crash produces no respawn", ctx do
+    crash_file = Path.join(ctx.dir, "crash-trigger")
+
+    spec = %{
+      ctx.spec
+      | auto_restart: %{enabled?: false, limit: 3, window_ms: 60_000},
+        rcon_probe_ms: 100
+    }
+
+    start_runtime!(spec, [{"FAKE_BEHAVIOR", "ok"}, {"FAKE_CRASH_FILE", crash_file}])
+
+    FakeRcon.set(ctx.rcon_port, %{ready?: true})
+    assert_receive %Event{type: :status, data: %{state: :starting, last_error: nil}}, 1_000
+    assert_receive %Event{type: :status, data: %{state: :running}}, 3_000
+
+    File.touch!(crash_file)
+    assert_receive %Event{type: :status, data: %{state: :crashed}}, 3_000
+    refute_receive %Event{type: :status, data: %{state: :starting}}, 1_000
+  end
+
   test "terminating the GenServer kills the OS process", ctx do
     pid = start_runtime!(ctx.spec)
     FakeRcon.set(ctx.rcon_port, %{ready?: true})

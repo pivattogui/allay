@@ -17,6 +17,11 @@ defmodule Allay.Runtime.ServerRuntime do
   Resetting only after the window elapses keeps a crash storm
   (crash → respawn → crash within the window) counted against the
   limit, while still forgiving a server that genuinely recovered.
+
+  A respawned process that crashes again during `:starting` (before
+  reaching `running`) stays `:crashed` and does not consume the remaining
+  restart budget — legacy parity: the legacy backend also bailed when the
+  crash happened before the server ever reached running.
   """
 
   use GenServer
@@ -38,7 +43,10 @@ defmodule Allay.Runtime.ServerRuntime do
 
   def kill(server), do: GenServer.call(server, :kill)
 
-  def send_command(server, command), do: GenServer.call(server, {:send_command, command})
+  # The handler opens a fresh RCON connection (5s connect + exec) inside the
+  # call, so the default 5s GenServer timeout could fire before RCON does.
+  def send_command(server, command),
+    do: GenServer.call(server, {:send_command, command}, 15_000)
 
   @impl true
   def init(opts) do
@@ -73,12 +81,15 @@ defmodule Allay.Runtime.ServerRuntime do
   end
 
   def handle_call(:stop, _from, %{machine_state: ms} = state) when ms in [:stopped, :crashed] do
-    {:reply, :ok, state}
+    # A crashed instance may have a :respawn scheduled; an explicit stop must
+    # cancel it so the server does not come back after the user ordered it down.
+    {:reply, :ok, cancel_restart(state)}
   end
 
   def handle_call(:stop, _from, state) do
     state =
       state
+      |> cancel_restart()
       |> Map.put(:intent, :stopping)
       |> transition(:stopping)
 
@@ -96,7 +107,11 @@ defmodule Allay.Runtime.ServerRuntime do
   end
 
   def handle_call(:kill, _from, state) do
-    state = Map.put(state, :intent, :killing)
+    state =
+      state
+      |> cancel_restart()
+      |> Map.put(:intent, :killing)
+
     signal(state.os_pid, "-KILL")
     {:reply, :ok, state}
   end
@@ -191,10 +206,35 @@ defmodule Allay.Runtime.ServerRuntime do
       signal(os_pid, "-KILL")
     end
 
+    broadcast_final_status(state)
     :ok
   end
 
-  def terminate(_reason, _state), do: :ok
+  def terminate(_reason, state) do
+    broadcast_final_status(state)
+    :ok
+  end
+
+  # When the whole subtree dies (e.g. :one_for_all restart, supervisor
+  # shutdown) the runtime vanishes without ever transitioning. Emit a final
+  # status so observers see a definite terminal state — :crashed if the
+  # machine already crashed, :stopped otherwise — instead of a silent gap.
+  defp broadcast_final_status(%{machine_state: :crashed} = state) do
+    Event.broadcast(state.spec.server_id, :status, %{
+      status_map(state)
+      | state: :crashed,
+        pid: nil
+    })
+  end
+
+  defp broadcast_final_status(state) do
+    Event.broadcast(state.spec.server_id, :status, %{
+      status_map(state)
+      | state: :stopped,
+        pid: nil,
+        uptime: nil
+    })
+  end
 
   defp wait_for_exit(os_pid, remaining_ms) when remaining_ms > 0 do
     if os_alive?(os_pid) do
@@ -284,6 +324,7 @@ defmodule Allay.Runtime.ServerRuntime do
       |> cancel_timer(:rcon_probe)
       |> cancel_timer(:startup_timeout)
       |> Map.put(:started_at, System.monotonic_time(:second))
+      |> Map.put(:last_error, nil)
       |> reset_restart_window_if_elapsed()
       |> transition(:running)
 
@@ -295,20 +336,46 @@ defmodule Allay.Runtime.ServerRuntime do
   # InstanceSupervisor — it needs the OS pid, which only exists post-spawn.
   # When ServerRuntime runs standalone (unit tests), there is no registered
   # instance supervisor and the sampler is simply skipped.
+  #
+  # start/stop run in an unlinked Task: Supervisor.start_child/terminate_child
+  # are synchronous calls against this process's OWN parent. If the parent is
+  # mid :one_for_all shutdown, calling it from a handle_* would block forever,
+  # the GenServer would never reach terminate/2, and the JVM would be orphaned
+  # after the 40s brutal kill. The sampler is a read-only side channel, so a
+  # failed start/stop is logged and ignored — the runtime must never block on
+  # its parent.
   defp start_sampler(%{os_pid: os_pid} = state) when is_integer(os_pid) do
-    case instance_supervisor(state.spec.server_id) do
-      nil -> :ok
-      sup_pid -> InstanceSupervisor.start_sampler(sup_pid, state.spec, os_pid)
-    end
+    spec = state.spec
+
+    sample_async(spec.server_id, fn sup_pid ->
+      InstanceSupervisor.start_sampler(sup_pid, spec, os_pid)
+    end)
   end
 
   defp start_sampler(_state), do: :ok
 
   defp stop_sampler(state) do
-    case instance_supervisor(state.spec.server_id) do
-      nil -> :ok
-      sup_pid -> InstanceSupervisor.stop_sampler(sup_pid)
-    end
+    sample_async(state.spec.server_id, &InstanceSupervisor.stop_sampler/1)
+  end
+
+  defp sample_async(server_id, fun) do
+    Task.start(fn ->
+      case instance_supervisor(server_id) do
+        nil ->
+          :ok
+
+        sup_pid ->
+          try do
+            fun.(sup_pid)
+          catch
+            kind, reason ->
+              require Logger
+              Logger.warning("sampler management failed: #{inspect({kind, reason})}")
+          end
+      end
+    end)
+
+    :ok
   end
 
   defp instance_supervisor(server_id) do
@@ -469,5 +536,14 @@ defmodule Allay.Runtime.ServerRuntime do
     |> cancel_timer(:startup_timeout)
     |> cancel_timer(:stop_escalate_term)
     |> cancel_timer(:stop_escalate_kill)
+  end
+
+  # An explicit stop/kill ends the current restart episode: cancel the pending
+  # respawn and forget the crash-storm counters so a later genuine restart
+  # starts with a fresh budget.
+  defp cancel_restart(state) do
+    state
+    |> cancel_timer(:respawn)
+    |> Map.merge(%{restart_count: 0, restart_window_started_at: nil})
   end
 end

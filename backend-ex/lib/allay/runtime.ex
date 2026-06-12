@@ -122,6 +122,10 @@ defmodule Allay.Runtime do
     do: reason
 
   defp translate_start_error({:preflight, reason}), do: reason
+  # Concurrent start_server for the same id: the loser's start_child returns
+  # {:already_started, pid} (the via-name was just taken). Map it to the
+  # facade's typed error instead of leaking a raw tuple.
+  defp translate_start_error({:already_started, _pid}), do: :already_running
   defp translate_start_error(other), do: other
 
   defp with_runtime(id, fun) do
