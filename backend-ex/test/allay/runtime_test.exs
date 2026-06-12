@@ -217,4 +217,16 @@ defmodule Allay.RuntimeTest do
     assert :ok = Runtime.stop_server(ctx.server_id)
     assert %{state: :crashed} = Runtime.status(ctx.server_id)
   end
+
+  describe "player_count/1" do
+    test "returns 0 for an unknown server id" do
+      assert Runtime.player_count("does-not-exist") == 0
+    end
+
+    test "returns 0 when running with no joins yet", ctx do
+      start_running!(ctx)
+
+      assert Runtime.player_count(ctx.server_id) == 0
+    end
+  end
 end

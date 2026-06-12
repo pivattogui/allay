@@ -87,6 +87,18 @@ defmodule Allay.Runtime.MetricsSamplerTest do
     refute_receive %Event{type: :metrics}, 300
   end
 
+  test "current_players/1 returns the live player count", %{server_id: id} do
+    pid = start_sampler!(id, interval_ms: 60_000)
+    assert_receive %Event{type: :metrics, data: %{player_count: 0}}, 1_000
+
+    assert MetricsSampler.current_players(pid) == 0
+
+    Event.broadcast(id, :log, log_line("Steve joined the game"))
+    assert_receive %Event{type: :metrics, data: %{player_count: 1}}, 1_000
+
+    assert MetricsSampler.current_players(pid) == 1
+  end
+
   defp log_line(message) do
     %{timestamp: DateTime.utc_now(), level: :info, message: message}
   end

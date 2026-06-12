@@ -40,6 +40,19 @@ config :allay, :data_dir, "data"
 
 config :allay, :mc_port_range, 25_565..25_575
 
+config :allay, Oban,
+  engine: Oban.Engines.Basic,
+  repo: Allay.Repo,
+  queues: [backups: 1, restarts: 1],
+  plugins: [
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"* * * * *", Allay.Backups.SchedulerTick},
+       {"* * * * *", Allay.Servers.RestartTick}
+     ]}
+  ]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

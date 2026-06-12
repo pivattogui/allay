@@ -12,7 +12,7 @@ defmodule Allay.Runtime do
   never deleted its map entries; this preserves that behavior.
   """
 
-  alias Allay.Runtime.{Event, InstanceSupervisor, LogWatcher, ServerRuntime, Spec}
+  alias Allay.Runtime.{Event, InstanceSupervisor, LogWatcher, MetricsSampler, ServerRuntime, Spec}
 
   @registry Allay.Runtime.Registry
   @server_supervisor Allay.Runtime.ServerSupervisor
@@ -98,6 +98,21 @@ defmodule Allay.Runtime do
     end
   end
 
+  @spec player_count(String.t()) :: non_neg_integer()
+  def player_count(id) do
+    case metrics_pid(id) do
+      nil ->
+        0
+
+      pid ->
+        try do
+          MetricsSampler.current_players(pid)
+        catch
+          :exit, _ -> 0
+        end
+    end
+  end
+
   @spec subscribe(String.t()) :: :ok | {:error, term()}
   def subscribe(id) do
     Phoenix.PubSub.subscribe(Allay.PubSub, Event.topic(id))
@@ -145,6 +160,7 @@ defmodule Allay.Runtime do
   defp runtime_pid(id), do: whereis({:runtime, id})
   defp instance_pid(id), do: whereis({:instance, id})
   defp log_watcher_pid(id), do: whereis({:log_watcher, id})
+  defp metrics_pid(id), do: whereis({:metrics, id})
 
   defp whereis(key) do
     case Registry.lookup(@registry, key) do

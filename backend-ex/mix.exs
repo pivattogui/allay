@@ -58,6 +58,8 @@ defmodule Allay.MixProject do
       {:bcrypt_elixir, "~> 3.2"},
       {:req, "~> 0.5"},
       {:image, "~> 0.54"},
+      {:oban, "~> 2.18"},
+      {:crontab, "~> 1.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]

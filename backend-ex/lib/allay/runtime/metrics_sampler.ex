@@ -21,6 +21,10 @@ defmodule Allay.Runtime.MetricsSampler do
     end
   end
 
+  @doc "Returns the current player count tracked by this sampler."
+  @spec current_players(GenServer.server()) :: non_neg_integer()
+  def current_players(server), do: GenServer.call(server, :current_players)
+
   @impl true
   def init(opts) do
     server_id = Keyword.fetch!(opts, :server_id)
@@ -40,6 +44,11 @@ defmodule Allay.Runtime.MetricsSampler do
 
     send(self(), :sample)
     {:ok, state}
+  end
+
+  @impl true
+  def handle_call(:current_players, _from, state) do
+    {:reply, state.player_count, state}
   end
 
   @impl true
