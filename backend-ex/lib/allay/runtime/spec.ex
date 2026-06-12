@@ -29,6 +29,8 @@ defmodule Allay.Runtime.Spec do
                 metrics_interval_ms: 5_000
               ]
 
+  @type t :: %__MODULE__{}
+
   def java_args(%__MODULE__{} = spec) do
     custom = spec.jvm_args |> String.split(~r/\s+/, trim: true)
 

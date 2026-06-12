@@ -21,7 +21,7 @@ defmodule Allay.Runtime.ServerRuntime do
 
   use GenServer
 
-  alias Allay.Runtime.{Event, Spec}
+  alias Allay.Runtime.{Event, InstanceSupervisor, Spec}
 
   @stdout_tail_limit 50
 
@@ -214,6 +214,7 @@ defmodule Allay.Runtime.ServerRuntime do
 
   defp handle_exit(state, code) do
     was_running = state.machine_state == :running
+    stop_sampler(state)
 
     state =
       state
@@ -278,12 +279,43 @@ defmodule Allay.Runtime.ServerRuntime do
   end
 
   defp mark_running(state) do
+    state =
+      state
+      |> cancel_timer(:rcon_probe)
+      |> cancel_timer(:startup_timeout)
+      |> Map.put(:started_at, System.monotonic_time(:second))
+      |> reset_restart_window_if_elapsed()
+      |> transition(:running)
+
+    start_sampler(state)
     state
-    |> cancel_timer(:rcon_probe)
-    |> cancel_timer(:startup_timeout)
-    |> Map.put(:started_at, System.monotonic_time(:second))
-    |> reset_restart_window_if_elapsed()
-    |> transition(:running)
+  end
+
+  # The sampler is a dynamic, temporary child of this server's
+  # InstanceSupervisor — it needs the OS pid, which only exists post-spawn.
+  # When ServerRuntime runs standalone (unit tests), there is no registered
+  # instance supervisor and the sampler is simply skipped.
+  defp start_sampler(%{os_pid: os_pid} = state) when is_integer(os_pid) do
+    case instance_supervisor(state.spec.server_id) do
+      nil -> :ok
+      sup_pid -> InstanceSupervisor.start_sampler(sup_pid, state.spec, os_pid)
+    end
+  end
+
+  defp start_sampler(_state), do: :ok
+
+  defp stop_sampler(state) do
+    case instance_supervisor(state.spec.server_id) do
+      nil -> :ok
+      sup_pid -> InstanceSupervisor.stop_sampler(sup_pid)
+    end
+  end
+
+  defp instance_supervisor(server_id) do
+    case Registry.lookup(Allay.Runtime.Registry, {:instance, server_id}) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
   end
 
   # The restart counter resets once the server has recovered and stayed up

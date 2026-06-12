@@ -12,8 +12,7 @@ defmodule Allay.Application do
       Allay.Repo,
       {DNSCluster, query: Application.get_env(:allay, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Allay.PubSub},
-      # Start a worker by calling: Allay.Worker.start_link(arg)
-      # {Allay.Worker, arg},
+      Allay.Runtime.Supervisor,
       # Start to serve requests, typically the last entry
       AllayWeb.Endpoint
     ]
