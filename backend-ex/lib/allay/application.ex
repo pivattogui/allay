@@ -14,6 +14,7 @@ defmodule Allay.Application do
       {Phoenix.PubSub, name: Allay.PubSub},
       Allay.Servers.JavaRegistry,
       Allay.Runtime.Supervisor,
+      Allay.Servers.Boot,
       # Start to serve requests, typically the last entry
       AllayWeb.Endpoint
     ]

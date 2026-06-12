@@ -11,4 +11,10 @@ defmodule Allay.Accounts.Scope do
 
   def for_user(%User{} = user), do: %__MODULE__{user: user}
   def for_user(nil), do: nil
+
+  @doc """
+  Scope for internal, non-user-initiated work (e.g. boot auto-start). Carries
+  no user; authorization treats it as a trusted system actor.
+  """
+  def system, do: %__MODULE__{user: nil}
 end

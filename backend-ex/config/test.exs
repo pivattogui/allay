@@ -33,3 +33,8 @@ config :phoenix,
 config :bcrypt_elixir, :log_rounds, 1
 
 config :allay, :minecraft_req_options, plug: {Req.Test, Allay.Minecraft.APIStub}
+
+# Boot.run starts auto_start servers from the DB at app boot. In test, the
+# sandbox owns the connection per-test, so skip it entirely; boot is tested
+# by calling Boot.run/1 directly.
+config :allay, :boot_autostart, false

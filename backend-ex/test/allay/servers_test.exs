@@ -5,11 +5,46 @@ defmodule Allay.ServersTest do
   import Allay.AccountsFixtures
 
   alias Allay.Accounts
+  alias Allay.Runtime
+  alias Allay.Runtime.{Event, FakeRcon}
   alias Allay.Servers
+
+  @fake_java Path.expand("../support/fake_java.sh", __DIR__)
 
   defp scope do
     user = user_fixture()
     Accounts.Scope.for_user(user)
+  end
+
+  # Provisions a server row whose java_path points at the fake_java harness
+  # (override path = no registry needed) and whose directory holds a server.jar.
+  defp runnable_server(rcon_port) do
+    dir = Path.join(System.tmp_dir!(), "srv-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "server.jar"), "fake")
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    srv =
+      server_fixture(%{
+        directory: dir,
+        java_path: @fake_java,
+        java_version: "21",
+        rcon_port: rcon_port,
+        rcon_password: "pw"
+      })
+
+    on_exit(fn -> Runtime.remove_instance(srv.id) end)
+    %{server: srv, dir: dir}
+  end
+
+  defp spec_overrides do
+    [
+      rcon_mod: FakeRcon,
+      startup_timeout_ms: 2_000,
+      stop_timeout_ms: 300,
+      term_timeout_ms: 300,
+      respawn_delay_ms: 50
+    ]
   end
 
   describe "list_servers/1" do
@@ -57,6 +92,140 @@ defmodule Allay.ServersTest do
 
     test "returns {:error, :not_found} for empty string" do
       assert {:error, :not_found} = Servers.get_server(scope(), "")
+    end
+  end
+
+  describe "lifecycle (fake java + FakeRcon)" do
+    setup do
+      {:ok, _} = FakeRcon.start_registry()
+      rcon_port = System.unique_integer([:positive])
+      %{rcon_port: rcon_port}
+    end
+
+    defp start_running!(sc, srv, rcon_port) do
+      Phoenix.PubSub.subscribe(Allay.PubSub, Event.topic(srv.id))
+
+      {:ok, %{state: state}} =
+        Servers.start_server(sc, srv.id,
+          env: [{"FAKE_BEHAVIOR", "ok"}],
+          spec_overrides: spec_overrides()
+        )
+
+      assert state in [:starting, :running]
+      FakeRcon.set(rcon_port, %{ready?: true})
+      assert_receive %Event{type: :status, data: %{state: :running}}, 3_000
+    end
+
+    test "full happy path: start → running → command → logs → stop → delete", %{
+      rcon_port: rcon_port
+    } do
+      sc = scope()
+      %{server: srv, dir: dir} = runnable_server(rcon_port)
+
+      start_running!(sc, srv, rcon_port)
+
+      assert {:ok, %{state: :running}} = Servers.server_status(sc, srv.id)
+
+      FakeRcon.set(rcon_port, %{ready?: true, on_exec: fn "list" -> {:ok, "3 players"} end})
+      assert {:ok, "3 players"} = Servers.send_command(sc, srv.id, "list")
+
+      assert {:ok, lines} = Servers.server_logs(sc, srv.id)
+      assert is_list(lines)
+      assert Enum.all?(lines, &is_binary/1)
+      assert Enum.any?(lines, &(&1 =~ "Done"))
+      assert Enum.any?(lines, &Regex.match?(~r/^\[\d{4}-\d{2}-\d{2}T/, &1))
+
+      %{pid: os_pid} = Runtime.status(srv.id)
+
+      FakeRcon.set(rcon_port, %{
+        ready?: true,
+        on_exec: fn
+          "stop" -> System.cmd("kill", ["-TERM", Integer.to_string(os_pid)]) && {:ok, "Stopping"}
+          _ -> {:ok, ""}
+        end
+      })
+
+      assert {:ok, %{state: :stopping}} = Servers.stop_server_process(sc, srv.id)
+      assert_receive %Event{type: :status, data: %{state: :stopped}}, 2_000
+
+      assert :ok = Servers.delete_server(sc, srv.id)
+      refute File.dir?(dir)
+      assert {:error, :not_found} = Servers.get_server(sc, srv.id)
+      assert %{state: :stopped, pid: nil} = Runtime.status(srv.id)
+    end
+
+    test "delete stops an active instance before removing it", %{rcon_port: rcon_port} do
+      sc = scope()
+      %{server: srv, dir: dir} = runnable_server(rcon_port)
+      start_running!(sc, srv, rcon_port)
+      %{pid: os_pid} = Runtime.status(srv.id)
+
+      FakeRcon.set(rcon_port, %{
+        ready?: true,
+        on_exec: fn
+          "stop" -> System.cmd("kill", ["-TERM", Integer.to_string(os_pid)]) && {:ok, "Stopping"}
+          _ -> {:ok, ""}
+        end
+      })
+
+      assert :ok = Servers.delete_server(sc, srv.id)
+      refute File.dir?(dir)
+      assert %{state: :stopped, pid: nil} = Runtime.status(srv.id)
+    end
+  end
+
+  describe "lifecycle guards" do
+    test "start_server on unknown id returns not_found" do
+      assert {:error, :not_found} = Servers.start_server(scope(), Ecto.UUID.generate())
+    end
+
+    test "stop_server_process on a never-started (stopped) server returns not_running" do
+      sc = scope()
+      srv = server_fixture()
+      assert {:error, :not_running} = Servers.stop_server_process(sc, srv.id)
+    end
+
+    test "kill_server on a never-started server returns ok with stopped status" do
+      sc = scope()
+      srv = server_fixture()
+      assert {:ok, %{state: :stopped}} = Servers.kill_server(sc, srv.id)
+    end
+
+    test "send_command with a blank command returns invalid_command" do
+      sc = scope()
+      srv = server_fixture()
+      assert {:error, :invalid_command} = Servers.send_command(sc, srv.id, "   ")
+    end
+
+    test "send_command with a nil command returns invalid_command" do
+      sc = scope()
+      srv = server_fixture()
+      assert {:error, :invalid_command} = Servers.send_command(sc, srv.id, nil)
+    end
+
+    test "send_command on a never-started server returns not_running" do
+      sc = scope()
+      srv = server_fixture()
+      assert {:error, :not_running} = Servers.send_command(sc, srv.id, "list")
+    end
+
+    test "server_status on a never-started server returns stopped" do
+      sc = scope()
+      srv = server_fixture()
+      assert {:ok, %{state: :stopped}} = Servers.server_status(sc, srv.id)
+    end
+
+    test "server_logs on a never-started server returns an empty list" do
+      sc = scope()
+      srv = server_fixture()
+      assert {:ok, []} = Servers.server_logs(sc, srv.id)
+    end
+
+    test "delete_server on a never-started server removes the row" do
+      sc = scope()
+      srv = server_fixture()
+      assert :ok = Servers.delete_server(sc, srv.id)
+      assert {:error, :not_found} = Servers.get_server(sc, srv.id)
     end
   end
 end
