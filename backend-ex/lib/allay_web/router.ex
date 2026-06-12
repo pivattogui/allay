@@ -56,6 +56,19 @@ defmodule AllayWeb.Router do
     post "/:id/icon", ServerIconController, :create
     get "/:id/icon", ServerIconController, :show
     delete "/:id/icon", ServerIconController, :delete
+
+    post "/:id/migrate", ServerController, :migrate
+  end
+
+  scope "/api/backups", AllayWeb do
+    pipe_through [:api, :authenticated]
+
+    get "/:serverId", BackupController, :index
+    post "/:serverId", BackupController, :create
+    patch "/:serverId/config", BackupController, :update_config
+    post "/:serverId/:backupId/restore", BackupController, :restore
+    get "/:serverId/:backupId/download", BackupController, :download
+    delete "/:serverId/:backupId", BackupController, :delete
   end
 
   scope "/api/system", AllayWeb do

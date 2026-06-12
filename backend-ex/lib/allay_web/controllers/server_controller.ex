@@ -52,6 +52,44 @@ defmodule AllayWeb.ServerController do
     end
   end
 
+  def migrate(conn, %{"id" => id} = params) do
+    scope = conn.assigns.current_scope
+    type = Map.get(params, "type")
+    version = Map.get(params, "version")
+
+    with :ok <- validate_migrate_input(type, version),
+         {:ok, _server} <- fetch_server(scope, id),
+         {:ok, result} <- migrate(scope, id, type, version) do
+      json(conn, %{
+        message: "Migration successful",
+        backupId: to_string(result.backup_id),
+        migration: %{
+          fromType: result.migration.from_type,
+          fromVersion: result.migration.from_version,
+          toType: result.migration.to_type,
+          toVersion: result.migration.to_version
+        }
+      })
+    end
+  end
+
+  # The context's generic :invalid_server_type is shared with the system
+  # /versions endpoint (VALIDATION_ERROR); migration needs its own code.
+  defp migrate(scope, id, type, version) do
+    case Servers.migrate_server(scope, id, type, version) do
+      {:error, :invalid_server_type} -> {:error, :invalid_migration_type}
+      other -> other
+    end
+  end
+
+  # Legacy parity: type+version presence is a manual 400 INVALID_INPUT, distinct
+  # from the INVALID_SERVER_TYPE the context raises for a present-but-bad type.
+  defp validate_migrate_input(type, version)
+       when is_binary(type) and type != "" and is_binary(version) and version != "",
+       do: :ok
+
+  defp validate_migrate_input(_type, _version), do: {:error, :invalid_input}
+
   # Translates the context's generic :not_found into the SERVER_NOT_FOUND code.
   defp fetch_server(scope, id) do
     case Servers.get_server(scope, id) do

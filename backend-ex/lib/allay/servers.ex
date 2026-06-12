@@ -7,14 +7,19 @@ defmodule Allay.Servers do
   import Ecto.Query
 
   alias Allay.Accounts.Scope
+  alias Allay.Backups
+  alias Allay.Minecraft.JarCache
   alias Allay.Minecraft.Properties
+  alias Allay.Minecraft.Versions
   alias Allay.Repo
   alias Allay.Runtime
+  alias Allay.Servers.JavaGate
   alias Allay.Servers.Provisioner
   alias Allay.Servers.RuntimeBridge
   alias Allay.Servers.Server
 
   @active_states [:running, :starting]
+  @migratable_types ["vanilla", "paper"]
   @unstoppable_states [:stopped, :stopping]
   @rcon_port_offset 10_000
 
@@ -382,6 +387,89 @@ defmodule Allay.Servers do
       :ok
     end
   end
+
+  @doc """
+  Migrates a server to a new type/version. Mirrors the legacy ordering exactly:
+  type guard → server 404 → running/starting guard → java gate → manual backup
+  → jar download + swap → row update. There is NO rollback on a failed jar swap;
+  the pre-migration backup is the recovery path (legacy parity — jars are
+  excluded from backups by design and re-downloaded on re-migrate).
+
+  `type` must be "vanilla" | "paper". `opts` accepts `:data_dir`, `:runtime`,
+  and `:tar_cmd` (test seams forwarded to `Allay.Backups` / `JarCache`).
+
+  Returns `{:ok, %{backup_id, migration: %{from_type, from_version, to_type,
+  to_version}}}` with the PRE-update values, or one of `{:error,
+  :invalid_server_type}`, `{:error, :not_found}`, `{:error, :server_running}`,
+  the java-gate error tuples, `{:error, {:backup_failed, _}}`, or `{:error,
+  {:jar_download_failed, message}}`.
+  """
+  def migrate_server(%Scope{} = scope, id, type, version, opts \\ []) do
+    runtime = Keyword.get(opts, :runtime, Runtime)
+
+    with :ok <- validate_migration_type(type),
+         {:ok, server} <- get_server(scope, id),
+         :ok <- ensure_migratable(runtime, server.id),
+         {:ok, major} <- JavaGate.assert_available(type, version),
+         {:ok, backup} <- create_migration_backup(scope, server.id, opts),
+         {:ok, jar_path} <- fetch_migration_jar(type, version, opts) do
+      swap_server_jar(server.directory, jar_path)
+      {:ok, _updated} = update_migrated_row(server, type, version, major)
+
+      {:ok,
+       %{
+         backup_id: backup.id,
+         migration: %{
+           from_type: server.type,
+           from_version: server.version,
+           to_type: type,
+           to_version: version
+         }
+       }}
+    end
+  end
+
+  defp validate_migration_type(type) when type in @migratable_types, do: :ok
+  defp validate_migration_type(_type), do: {:error, :invalid_server_type}
+
+  defp ensure_migratable(runtime, id) do
+    if runtime.status(id).state in @active_states,
+      do: {:error, :server_running},
+      else: :ok
+  end
+
+  defp create_migration_backup(scope, server_id, opts) do
+    backup_opts = Keyword.take(opts, [:data_dir, :runtime, :tar_cmd, :save_wait_ms])
+    Backups.create_backup(scope, server_id, "manual", backup_opts)
+  end
+
+  defp fetch_migration_jar(type, version, opts) do
+    type_atom = migration_type_atom(type)
+    jar_opts = Keyword.take(opts, [:data_dir])
+
+    with {:ok, spec} <- Versions.download_spec(type_atom, version),
+         {:ok, path} <- JarCache.fetch(type_atom, version, spec, jar_opts) do
+      {:ok, path}
+    else
+      {:error, message} -> {:error, {:jar_download_failed, message}}
+    end
+  end
+
+  # No rollback (legacy parity): unlink the old jar, then copy the new one in.
+  defp swap_server_jar(directory, jar_path) do
+    server_jar = Path.join(directory, "server.jar")
+    if File.exists?(server_jar), do: File.rm!(server_jar)
+    File.cp!(jar_path, server_jar)
+  end
+
+  defp update_migrated_row(server, type, version, major) do
+    server
+    |> Ecto.Changeset.change(type: type, version: version, java_version: to_string(major))
+    |> Repo.update()
+  end
+
+  defp migration_type_atom("vanilla"), do: :vanilla
+  defp migration_type_atom("paper"), do: :paper
 
   defp validate_command(command) when is_binary(command) do
     if String.trim(command) == "", do: {:error, :invalid_command}, else: :ok

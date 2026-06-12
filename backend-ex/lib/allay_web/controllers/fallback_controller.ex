@@ -113,6 +113,54 @@ defmodule AllayWeb.FallbackController do
     error(conn, :bad_request, "Invalid server type", "VALIDATION_ERROR")
   end
 
+  # Migration's type guard carries its own legacy code (INVALID_SERVER_TYPE),
+  # distinct from the system /versions endpoint's VALIDATION_ERROR above.
+  def call(conn, {:error, :invalid_migration_type}) do
+    error(conn, :bad_request, "Invalid server type", "INVALID_SERVER_TYPE")
+  end
+
+  def call(conn, {:error, :invalid_input}) do
+    error(conn, :bad_request, "Type and version are required", "INVALID_INPUT")
+  end
+
+  def call(conn, {:error, :backup_not_found}) do
+    error(conn, :not_found, "Backup not found", "BACKUP_NOT_FOUND")
+  end
+
+  def call(conn, {:error, :backup_file_not_found}) do
+    error(conn, :not_found, "Backup file not found", "BACKUP_FILE_NOT_FOUND")
+  end
+
+  def call(conn, {:error, :config_not_found}) do
+    error(conn, :not_found, "Backup config not found", "CONFIG_NOT_FOUND")
+  end
+
+  def call(conn, {:error, :server_running}) do
+    error(
+      conn,
+      :conflict,
+      "Cannot restore while server is running. Stop the server first.",
+      "SERVER_RUNNING"
+    )
+  end
+
+  def call(conn, {:error, {:backup_failed, _output}}) do
+    error(conn, :internal_server_error, "Failed to create backup", "BACKUP_FAILED")
+  end
+
+  def call(conn, {:error, {:restore_failed, _reason}}) do
+    error(conn, :internal_server_error, "Failed to restore backup", "RESTORE_FAILED")
+  end
+
+  def call(conn, {:error, {:jar_download_failed, _message}}) do
+    error(
+      conn,
+      :internal_server_error,
+      "Failed to download new server JAR",
+      "JAR_DOWNLOAD_FAILED"
+    )
+  end
+
   def call(conn, {:error, :fetch_versions_failed}) do
     error(conn, :internal_server_error, "Failed to fetch versions", "FETCH_VERSIONS_FAILED")
   end
