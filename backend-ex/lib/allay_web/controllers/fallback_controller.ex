@@ -49,6 +49,10 @@ defmodule AllayWeb.FallbackController do
     error(conn, :not_found, "Icon not found", "ICON_NOT_FOUND")
   end
 
+  def call(conn, {:error, :properties_not_found}) do
+    error(conn, :not_found, "server.properties not found", "PROPERTIES_NOT_FOUND")
+  end
+
   def call(conn, {:error, :port_in_use}) do
     error(conn, :conflict, "Port already in use by another server", "PORT_IN_USE")
   end

@@ -62,6 +62,38 @@ defmodule AllayWeb.SystemControllerTest do
     end
   end
 
+  describe "GET /api/system/java-versions" do
+    test "200 with the installed runtimes as {version, path, vendor}", %{conn: conn} do
+      JavaRegistry.put(%{21 => "/opt/java/jdk21/bin/java", 17 => "/opt/java/jdk17/bin/java"})
+
+      assert %{"versions" => versions} =
+               json_response(get(conn, ~p"/api/system/java-versions"), 200)
+
+      assert Enum.sort_by(versions, & &1["version"]) == [
+               %{"version" => "17", "path" => "/opt/java/jdk17/bin/java", "vendor" => "openjdk"},
+               %{"version" => "21", "path" => "/opt/java/jdk21/bin/java", "vendor" => "openjdk"}
+             ]
+    end
+
+    test "200 empty list when none installed", %{conn: conn} do
+      JavaRegistry.put(%{})
+
+      assert %{"versions" => []} =
+               json_response(get(conn, ~p"/api/system/java-versions"), 200)
+    end
+  end
+
+  describe "POST /api/system/java-versions/refresh" do
+    test "200 rediscovers and returns the list", %{conn: conn} do
+      # discover/0 scans the real filesystem dirs (empty in CI); assert the
+      # shape, not the contents.
+      assert %{"versions" => versions} =
+               json_response(post(conn, ~p"/api/system/java-versions/refresh"), 200)
+
+      assert is_list(versions)
+    end
+  end
+
   describe "GET /api/system/info" do
     test "200 with portRange and system fields", %{conn: conn} do
       JavaRegistry.put(%{21 => "/usr/bin/java"})

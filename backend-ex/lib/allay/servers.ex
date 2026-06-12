@@ -16,6 +16,7 @@ defmodule Allay.Servers do
 
   @active_states [:running, :starting]
   @unstoppable_states [:stopped, :stopping]
+  @rcon_port_offset 10_000
 
   @doc """
   Returns all servers ordered by insertion time, newest first.
@@ -62,10 +63,20 @@ defmodule Allay.Servers do
   """
   def update_server(%Scope{} = scope, id, attrs) do
     with {:ok, server} <- get_server(scope, id),
-         changeset = Server.update_changeset(server, attrs),
+         changeset = server |> Server.update_changeset(attrs) |> put_rcon_port_change(),
          {:ok, updated} <- persist(changeset) do
       sync_port_properties(server, updated)
       {:ok, updated}
+    end
+  end
+
+  # When the game port moves, the derived RCON port moves with it (port +
+  # offset) so a freed game port doesn't strand its RCON port and block a
+  # later server from claiming it. No-op when the port isn't changing.
+  defp put_rcon_port_change(%Ecto.Changeset{} = changeset) do
+    case Ecto.Changeset.get_change(changeset, :port) do
+      nil -> changeset
+      new_port -> Ecto.Changeset.put_change(changeset, :rcon_port, new_port + @rcon_port_offset)
     end
   end
 
@@ -101,6 +112,106 @@ defmodule Allay.Servers do
     end
   end
 
+  @doc """
+  Returns the server's parsed `server.properties` as a `{key => value}` map.
+  An absent file yields `{:ok, %{}}` (legacy GET /:id/properties parity).
+  """
+  def get_properties(%Scope{} = scope, id) do
+    with {:ok, server} <- get_server(scope, id) do
+      path = Path.join(server.directory, "server.properties")
+
+      case File.read(path) do
+        {:ok, raw} -> {:ok, Properties.parse(raw)}
+        {:error, _} -> {:ok, %{}}
+      end
+    end
+  end
+
+  @doc """
+  Serializes `props` (a full key-value map) to the server's `server.properties`,
+  replacing the file. If the map carries a differing `server-port`, the DB port
+  follows it (and `rcon_port`); a port already held by another server is surfaced
+  as `port_conflict: true` and the DB is left untouched (legacy silently skipped
+  the update — here the conflict is reported).
+
+  Returns `{:ok, %{needs_restart: bool, port_conflict: bool}}`.
+  """
+  def put_properties(%Scope{} = scope, id, props) when is_map(props) do
+    with {:ok, server} <- get_server(scope, id) do
+      needs_restart = Runtime.status(id).state == :running
+      File.write!(properties_path(server), Properties.serialize(props))
+      port_conflict = sync_db_port(server, props["server-port"])
+      {:ok, %{needs_restart: needs_restart, port_conflict: port_conflict}}
+    end
+  end
+
+  @doc """
+  Returns the raw `server.properties` content verbatim (comment-preserving).
+  `{:error, :properties_not_found}` when the file is absent.
+  """
+  def get_properties_raw(%Scope{} = scope, id) do
+    with {:ok, server} <- get_server(scope, id) do
+      case File.read(properties_path(server)) do
+        {:ok, raw} -> {:ok, raw}
+        {:error, _} -> {:error, :properties_not_found}
+      end
+    end
+  end
+
+  @doc """
+  Writes `content` verbatim to `server.properties`. Port-sync semantics match
+  `put_properties/3`, with the new port parsed from the raw content.
+
+  `needs_restart` is captured BEFORE the write (legacy raw-endpoint parity).
+  Returns `{:ok, %{needs_restart: bool, port_conflict: bool}}`.
+  """
+  def put_properties_raw(%Scope{} = scope, id, content) when is_binary(content) do
+    with {:ok, server} <- get_server(scope, id) do
+      needs_restart = Runtime.status(id).state == :running
+      File.write!(properties_path(server), content)
+
+      port_conflict =
+        sync_db_port(server, content |> Properties.parse() |> Map.get("server-port"))
+
+      {:ok, %{needs_restart: needs_restart, port_conflict: port_conflict}}
+    end
+  end
+
+  defp properties_path(%Server{directory: directory}) do
+    Path.join(directory, "server.properties")
+  end
+
+  # Reconciles the DB port with a `server-port` value supplied via properties.
+  # Returns true only when the requested port is held by another server (the
+  # caller surfaces this as port_conflict); the on-disk file already carries
+  # the user's value regardless. No DB write happens on no-change or conflict.
+  defp sync_db_port(_server, nil), do: false
+
+  defp sync_db_port(%Server{} = server, raw_port) do
+    case Integer.parse(raw_port) do
+      {new_port, ""} when new_port != server.port ->
+        if port_held_by_other?(new_port, server.id) do
+          true
+        else
+          server
+          |> Ecto.Changeset.change(
+            port: new_port,
+            rcon_port: new_port + @rcon_port_offset
+          )
+          |> Repo.update!()
+
+          false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp port_held_by_other?(port, server_id) do
+    Repo.exists?(from s in Server, where: s.port == ^port and s.id != ^server_id)
+  end
+
   defp persist(changeset) do
     case Repo.update(changeset) do
       {:ok, server} -> {:ok, server}
@@ -127,12 +238,24 @@ defmodule Allay.Servers do
        when old_port == new_port,
        do: :ok
 
-  defp sync_port_properties(_old, %Server{directory: directory, port: new_port}) do
+  defp sync_port_properties(_old, %Server{
+         directory: directory,
+         port: new_port,
+         rcon_port: new_rcon_port
+       }) do
     path = Path.join(directory, "server.properties")
 
     case File.read(path) do
-      {:ok, raw} -> File.write(path, Properties.put_key(raw, "server-port", new_port))
-      {:error, _} -> :ok
+      {:ok, raw} ->
+        updated =
+          raw
+          |> Properties.put_key("server-port", new_port)
+          |> Properties.put_key("rcon.port", new_rcon_port)
+
+        File.write(path, updated)
+
+      {:error, _} ->
+        :ok
     end
   end
 

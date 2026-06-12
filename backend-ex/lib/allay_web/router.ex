@@ -41,6 +41,11 @@ defmodule AllayWeb.Router do
     get "/:id/config", ServerConfigController, :show
     patch "/:id/config", ServerConfigController, :update
 
+    get "/:id/properties", ServerPropertiesController, :show
+    put "/:id/properties", ServerPropertiesController, :update
+    get "/:id/properties/raw", ServerPropertiesController, :show_raw
+    put "/:id/properties/raw", ServerPropertiesController, :update_raw
+
     post "/:id/start", ServerLifecycleController, :start
     post "/:id/stop", ServerLifecycleController, :stop
     post "/:id/kill", ServerLifecycleController, :kill
@@ -59,6 +64,8 @@ defmodule AllayWeb.Router do
     get "/server-types", SystemController, :server_types
     get "/versions/:type", SystemController, :versions
     get "/info", SystemController, :info
+    get "/java-versions", SystemController, :java_versions
+    post "/java-versions/refresh", SystemController, :refresh_java_versions
   end
 
   # Enable LiveDashboard in development

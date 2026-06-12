@@ -26,6 +26,25 @@ defmodule AllayWeb.SystemController do
     end
   end
 
+  def java_versions(conn, _params) do
+    json(conn, %{versions: java_version_list(JavaRegistry.runtimes())})
+  end
+
+  def refresh_java_versions(conn, _params) do
+    json(conn, %{versions: java_version_list(JavaRegistry.discover())})
+  end
+
+  # The registry holds %{major => bin_path}. The frontend reads {version, path,
+  # vendor}; vendor is unknowable from the discovery probe, so it is reported as
+  # "openjdk" (the only runtime family this panel targets).
+  defp java_version_list(runtimes) do
+    runtimes
+    |> Enum.sort_by(fn {major, _path} -> major end)
+    |> Enum.map(fn {major, path} ->
+      %{version: to_string(major), path: path, vendor: "openjdk"}
+    end)
+  end
+
   def info(conn, _params) do
     range = Application.get_env(:allay, :mc_port_range, 25_565..25_575)
 

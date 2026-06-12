@@ -5,6 +5,7 @@ defmodule Allay.ServersTest do
   import Allay.AccountsFixtures
 
   alias Allay.Accounts
+  alias Allay.Minecraft.Properties
   alias Allay.Runtime
   alias Allay.Runtime.{Event, FakeRcon}
   alias Allay.Servers
@@ -272,6 +273,156 @@ defmodule Allay.ServersTest do
       content = File.read!(Path.join(dir, "server.properties"))
       assert content =~ "server-port=25566"
       assert content =~ "motd=hi"
+    end
+
+    test "moves rcon_port with the game port and rewrites rcon.port in properties" do
+      sc = scope()
+      dir = Path.join(System.tmp_dir!(), "rcon-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+
+      File.write!(
+        Path.join(dir, "server.properties"),
+        "server-port=25565\nrcon.port=35565\n"
+      )
+
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      srv = server_fixture(%{port: 25_565, rcon_port: 35_565, directory: dir})
+
+      assert {:ok, updated} = Servers.update_server(sc, srv.id, %{"port" => 25_566})
+      assert updated.rcon_port == 25_566 + 10_000
+
+      content = File.read!(Path.join(dir, "server.properties"))
+      assert content =~ "server-port=25566"
+      assert content =~ "rcon.port=35566"
+    end
+
+    test "freeing the old port lets a new server claim it without rcon collision" do
+      sc = scope()
+      dir = Path.join(System.tmp_dir!(), "free-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "server.properties"), "server-port=25565\nrcon.port=35565\n")
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      srv = server_fixture(%{port: 25_565, rcon_port: 35_565, directory: dir})
+
+      assert {:ok, updated} = Servers.update_server(sc, srv.id, %{"port" => 25_566})
+      # rcon_port moved off 35565, so neither the game port 25565 nor its
+      # derived rcon 35565 collide with this row anymore.
+      assert updated.rcon_port == 35_566
+
+      newcomer = server_fixture(%{port: 25_565, rcon_port: 35_565})
+      assert newcomer.port == 25_565
+    end
+  end
+
+  describe "get_properties/2 and put_properties/3" do
+    defp dir_with_properties(content) do
+      dir = Path.join(System.tmp_dir!(), "props-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      if content, do: File.write!(Path.join(dir, "server.properties"), content)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      dir
+    end
+
+    test "get_properties returns the parsed map" do
+      sc = scope()
+      dir = dir_with_properties("server-port=25565\nmotd=hi\n")
+      srv = server_fixture(%{directory: dir})
+
+      assert {:ok, %{"server-port" => "25565", "motd" => "hi"}} =
+               Servers.get_properties(sc, srv.id)
+    end
+
+    test "get_properties returns an empty map when the file is missing" do
+      sc = scope()
+      dir = dir_with_properties(nil)
+      srv = server_fixture(%{directory: dir})
+
+      assert {:ok, %{}} = Servers.get_properties(sc, srv.id)
+    end
+
+    test "get_properties 404s for unknown id" do
+      assert {:error, :not_found} = Servers.get_properties(scope(), Ecto.UUID.generate())
+    end
+
+    test "put_properties serializes the full map to disk" do
+      sc = scope()
+      dir = dir_with_properties("server-port=25565\n")
+      srv = server_fixture(%{port: 25_565, rcon_port: 35_565, directory: dir})
+
+      assert {:ok, %{needs_restart: false, port_conflict: false}} =
+               Servers.put_properties(sc, srv.id, %{"motd" => "new", "difficulty" => "hard"})
+
+      props = Path.join(dir, "server.properties") |> File.read!() |> Properties.parse()
+      assert props == %{"motd" => "new", "difficulty" => "hard"}
+    end
+
+    test "put_properties with a new server-port updates DB port and rcon_port" do
+      sc = scope()
+      dir = dir_with_properties("server-port=25565\n")
+      srv = server_fixture(%{port: 25_565, rcon_port: 35_565, directory: dir})
+
+      assert {:ok, %{port_conflict: false}} =
+               Servers.put_properties(sc, srv.id, %{"server-port" => "25566"})
+
+      reloaded = Repo.get!(Allay.Servers.Server, srv.id)
+      assert reloaded.port == 25_566
+      assert reloaded.rcon_port == 25_566 + 10_000
+    end
+
+    test "put_properties flags port_conflict and leaves DB untouched on a taken port" do
+      sc = scope()
+      _holder = server_fixture(%{port: 25_570, rcon_port: 35_570})
+      dir = dir_with_properties("server-port=25565\n")
+      srv = server_fixture(%{port: 25_565, rcon_port: 35_565, directory: dir})
+
+      assert {:ok, %{port_conflict: true}} =
+               Servers.put_properties(sc, srv.id, %{"server-port" => "25570"})
+
+      reloaded = Repo.get!(Allay.Servers.Server, srv.id)
+      assert reloaded.port == 25_565
+    end
+  end
+
+  describe "get_properties_raw/2 and put_properties_raw/3" do
+    test "get_properties_raw returns the verbatim file content" do
+      sc = scope()
+      dir = Path.join(System.tmp_dir!(), "raw-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "server.properties"), "# comment\nserver-port=25565\n")
+      on_exit(fn -> File.rm_rf!(dir) end)
+      srv = server_fixture(%{directory: dir})
+
+      assert {:ok, "# comment\nserver-port=25565\n"} = Servers.get_properties_raw(sc, srv.id)
+    end
+
+    test "get_properties_raw returns :properties_not_found when the file is missing" do
+      sc = scope()
+      dir = Path.join(System.tmp_dir!(), "raw-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      srv = server_fixture(%{directory: dir})
+
+      assert {:error, :properties_not_found} = Servers.get_properties_raw(sc, srv.id)
+    end
+
+    test "put_properties_raw writes content verbatim and syncs the port" do
+      sc = scope()
+      dir = Path.join(System.tmp_dir!(), "raw-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      srv = server_fixture(%{port: 25_565, rcon_port: 35_565, directory: dir})
+
+      content = "# kept\nserver-port=25566\nmotd=hello\n"
+
+      assert {:ok, %{needs_restart: false, port_conflict: false}} =
+               Servers.put_properties_raw(sc, srv.id, content)
+
+      assert File.read!(Path.join(dir, "server.properties")) == content
+
+      reloaded = Repo.get!(Allay.Servers.Server, srv.id)
+      assert reloaded.port == 25_566
     end
   end
 
