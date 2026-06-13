@@ -58,6 +58,15 @@ defmodule AllayWeb.Router do
     delete "/:id/icon", ServerIconController, :delete
 
     post "/:id/migrate", ServerController, :migrate
+
+    post "/:id/files/list", ServerFileController, :list
+    get "/:id/files/read/*path", ServerFileController, :read
+    put "/:id/files/write/*path", ServerFileController, :write
+    post "/:id/files/mkdir/*path", ServerFileController, :mkdir
+    post "/:id/files/rename", ServerFileController, :rename
+    get "/:id/files/download/*path", ServerFileController, :download
+    post "/:id/files/upload", ServerFileController, :upload
+    delete "/:id/files/*path", ServerFileController, :delete
   end
 
   scope "/api/backups", AllayWeb do

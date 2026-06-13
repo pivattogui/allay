@@ -181,6 +181,97 @@ defmodule AllayWeb.FallbackController do
     error(conn, :internal_server_error, "Failed to fetch versions", "FETCH_VERSIONS_FAILED")
   end
 
+  # ── File browser / editor errors (legacy code vocabulary) ───────────────────
+
+  def call(conn, {:error, :invalid_path}) do
+    error(conn, :bad_request, "Path traversal attempt detected", "INVALID_PATH")
+  end
+
+  def call(conn, {:error, :invalid_old_path}) do
+    error(conn, :bad_request, "Path traversal attempt detected", "INVALID_PATH")
+  end
+
+  def call(conn, {:error, :invalid_new_path}) do
+    error(conn, :bad_request, "Path traversal attempt detected", "INVALID_PATH")
+  end
+
+  def call(conn, {:error, :directory_not_found}) do
+    error(conn, :not_found, "Directory not found", "DIRECTORY_NOT_FOUND")
+  end
+
+  def call(conn, {:error, :not_a_directory}) do
+    error(conn, :bad_request, "Path is not a directory", "NOT_A_DIRECTORY")
+  end
+
+  def call(conn, {:error, :file_not_found}) do
+    error(conn, :not_found, "File not found", "FILE_NOT_FOUND")
+  end
+
+  def call(conn, {:error, :is_directory}) do
+    error(conn, :bad_request, "Path is a directory", "IS_DIRECTORY")
+  end
+
+  def call(conn, {:error, :name_required}) do
+    error(conn, :bad_request, "Name is required", "NAME_REQUIRED")
+  end
+
+  def call(conn, {:error, :already_exists}) do
+    error(conn, :bad_request, "Path already exists", "ALREADY_EXISTS")
+  end
+
+  def call(conn, {:error, :cannot_delete_root}) do
+    error(conn, :bad_request, "Cannot delete root directory", "CANNOT_DELETE_ROOT")
+  end
+
+  def call(conn, {:error, :path_not_found}) do
+    error(conn, :not_found, "Path not found", "NOT_FOUND")
+  end
+
+  def call(conn, {:error, :source_not_found}) do
+    error(conn, :not_found, "Source path not found", "SOURCE_NOT_FOUND")
+  end
+
+  def call(conn, {:error, :destination_exists}) do
+    error(conn, :bad_request, "Destination already exists", "DESTINATION_EXISTS")
+  end
+
+  def call(conn, {:error, :is_directory_download}) do
+    error(
+      conn,
+      :bad_request,
+      "Directory download not yet implemented. Use backup feature.",
+      "DIR_DOWNLOAD_NOT_IMPLEMENTED"
+    )
+  end
+
+  def call(conn, {:error, :content_required}) do
+    error(conn, :bad_request, "Content is required", "CONTENT_REQUIRED")
+  end
+
+  def call(conn, {:error, :paths_required}) do
+    error(conn, :bad_request, "oldPath and newPath are required", "PATHS_REQUIRED")
+  end
+
+  def call(conn, {:error, :write_error}) do
+    error(conn, :internal_server_error, "Failed to write file", "WRITE_ERROR")
+  end
+
+  def call(conn, {:error, :mkdir_error}) do
+    error(conn, :internal_server_error, "Failed to create directory", "MKDIR_ERROR")
+  end
+
+  def call(conn, {:error, :delete_error}) do
+    error(conn, :internal_server_error, "Failed to delete path", "DELETE_ERROR")
+  end
+
+  def call(conn, {:error, :rename_error}) do
+    error(conn, :internal_server_error, "Failed to rename path", "RENAME_ERROR")
+  end
+
+  def call(conn, {:error, :upload_error}) do
+    error(conn, :internal_server_error, "Failed to upload file(s)", "UPLOAD_ERROR")
+  end
+
   defp error(conn, status, message, code) do
     conn
     |> put_status(status)

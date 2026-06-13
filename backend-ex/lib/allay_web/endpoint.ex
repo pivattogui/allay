@@ -46,6 +46,9 @@ defmodule AllayWeb.Endpoint do
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
+    # 100 MiB cap — the legacy constant existed but was never enforced server-side.
+    # Oversized requests raise Plug.Parsers.RequestTooLargeError → 413.
+    length: 100 * 1024 * 1024,
     json_decoder: Phoenix.json_library()
 
   plug Plug.MethodOverride
