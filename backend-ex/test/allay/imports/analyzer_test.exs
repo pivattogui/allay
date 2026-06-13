@@ -73,6 +73,27 @@ defmodule Allay.Imports.AnalyzerTest do
       assert "level.dat" in entries
     end
 
+    test "tar non-regular entries (symlinks) are dropped at list time" do
+      # Built via the OS tar so the archive actually carries a symlink member;
+      # erl_tar.create cannot emit one from a plain file list.
+      scratch = Path.join(System.tmp_dir!(), "slsrc_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(scratch)
+      File.write!(Path.join(scratch, "real.txt"), "real")
+      File.ln_s!("real.txt", Path.join(scratch, "link.txt"))
+      path = Path.join(System.tmp_dir!(), "sl_#{System.unique_integer([:positive])}.tar.gz")
+      on_exit(fn -> File.rm_rf(scratch) end)
+      on_exit(fn -> File.rm(path) end)
+
+      {_out, 0} =
+        System.cmd("tar", ["-czf", path, "-C", scratch, "real.txt", "link.txt"],
+          stderr_to_stdout: true
+        )
+
+      assert {:ok, entries} = Analyzer.list_entries(path)
+      assert "real.txt" in entries
+      refute "link.txt" in entries
+    end
+
     test "normalize/1 drops __MACOSX artifacts" do
       raw = ["__MACOSX/._world", "world/level.dat", "server.properties"]
       entries = Analyzer.normalize(raw)

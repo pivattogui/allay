@@ -91,21 +91,25 @@ defmodule Allay.Imports.Analyzer do
   defp list_tar_entries(archive_path) do
     case :erl_tar.table(to_charlist(archive_path), [:compressed, :verbose]) do
       {:ok, records} ->
-        entries = Enum.map(records, &tar_entry_name/1)
-        {:ok, entries}
+        {:ok, Enum.flat_map(records, &tar_entry_name/1)}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
+  # Non-regular, non-directory members (symlinks, hardlinks, devices) are dropped
+  # at list time so they never reach categorization, selection, or extraction —
+  # an imported archive must not be able to plant a symlink (delta 2).
   defp tar_entry_name({name, :directory, _size, _mtime, _mode, _uid, _gid}) do
-    ensure_trailing_slash(to_string(name))
+    [ensure_trailing_slash(to_string(name))]
   end
 
-  defp tar_entry_name({name, _type, _size, _mtime, _mode, _uid, _gid}) do
-    to_string(name)
+  defp tar_entry_name({name, :regular, _size, _mtime, _mode, _uid, _gid}) do
+    [to_string(name)]
   end
+
+  defp tar_entry_name(_non_regular), do: []
 
   defp ensure_trailing_slash(name) do
     if String.ends_with?(name, "/"), do: name, else: name <> "/"

@@ -75,6 +75,10 @@ defmodule AllayWeb.Router do
     get "/:serverId", BackupController, :index
     post "/:serverId", BackupController, :create
     patch "/:serverId/config", BackupController, :update_config
+
+    post "/:server_id/import/analyze", ImportController, :analyze
+    post "/:server_id/import/:import_id/execute", ImportController, :execute
+
     post "/:serverId/:backupId/restore", BackupController, :restore
     get "/:serverId/:backupId/download", BackupController, :download
     delete "/:serverId/:backupId", BackupController, :delete

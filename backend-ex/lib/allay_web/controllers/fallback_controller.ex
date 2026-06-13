@@ -181,6 +181,33 @@ defmodule AllayWeb.FallbackController do
     error(conn, :internal_server_error, "Failed to fetch versions", "FETCH_VERSIONS_FAILED")
   end
 
+  # ── Import errors ───────────────────────────────────────────────────────────
+
+  def call(conn, {:error, :unsupported_format}) do
+    error(
+      conn,
+      :bad_request,
+      "Unsupported archive format. Use .zip, .tar.gz, or .tgz.",
+      "UNSUPPORTED_FORMAT"
+    )
+  end
+
+  def call(conn, {:error, :server_busy}) do
+    error(conn, :conflict, "Server must be stopped before import", "SERVER_BUSY")
+  end
+
+  def call(conn, {:error, :import_not_found}) do
+    error(conn, :not_found, "Import session not found or expired", "IMPORT_NOT_FOUND")
+  end
+
+  def call(conn, {:error, :empty_selection}) do
+    error(conn, :bad_request, "No files selected for import", "EMPTY_SELECTION")
+  end
+
+  def call(conn, {:error, {:import_failed, _reason}}) do
+    error(conn, :internal_server_error, "Failed to import archive", "IMPORT_FAILED")
+  end
+
   # ── File browser / editor errors (legacy code vocabulary) ───────────────────
 
   def call(conn, {:error, :invalid_path}) do
