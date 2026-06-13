@@ -10,6 +10,7 @@ defmodule Allay.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      releases: [allay: [include_executables_for: [:unix], steps: [:assemble]]],
       listeners: [Phoenix.CodeReloader],
       dialyzer: [
         plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
