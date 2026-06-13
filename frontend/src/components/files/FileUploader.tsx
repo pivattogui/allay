@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { getAuthHeaders } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 const ARCHIVE_EXTENSIONS = ['.zip', '.tar.gz', '.tgz']
@@ -123,7 +124,6 @@ export function FileUploader({
     setFiles((prev) => prev.map((f) => ({ ...f, status: 'uploading' as const })))
 
     try {
-      const token = localStorage.getItem('token')
       const url = new URL(`/api/servers/${serverId}/files/upload`, window.location.origin)
       if (currentPath) {
         url.searchParams.set('path', currentPath)
@@ -131,9 +131,7 @@ export function FileUploader({
 
       const res = await fetch(url.toString(), {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         body: formData,
       })
 

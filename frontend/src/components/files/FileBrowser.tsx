@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getAuthHeaders } from '@/lib/api'
 import { FileBreadcrumb } from './FileBreadcrumb'
 import { FileEditor } from './FileEditor'
 import { FileTree } from './FileTree'
@@ -47,11 +48,10 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
     async (path: string = '') => {
       setLoading(true)
       try {
-        const token = localStorage.getItem('token')
         const res = await fetch(`/api/servers/${serverId}/files/list`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...getAuthHeaders(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ path }),
@@ -102,9 +102,8 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
     setIsModified(false)
 
     try {
-      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/read/${filePath}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
       })
 
       if (res.ok) {
@@ -153,11 +152,10 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
 
     setIsSaving(true)
     try {
-      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/write/${selectedFile.path}`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content: editorContent }),
@@ -194,10 +192,9 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
     const itemPath = currentPath ? `${currentPath}/${entry.name}` : entry.name
 
     try {
-      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/${itemPath}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
       })
 
       if (res.ok) {
@@ -223,11 +220,10 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
     const newPath = currentPath ? `${currentPath}/${newName}` : newName
 
     try {
-      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/rename`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ oldPath, newPath }),
@@ -252,9 +248,8 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
     const filePath = currentPath ? `${currentPath}/${entry.name}` : entry.name
 
     try {
-      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/download/${filePath}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
       })
 
       if (res.ok) {
@@ -285,10 +280,9 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
     const folderPath = currentPath ? `${currentPath}/${newFolderName}` : newFolderName
 
     try {
-      const token = localStorage.getItem('token')
       const res = await fetch(`/api/servers/${serverId}/files/mkdir/${folderPath}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
       })
 
       if (res.ok) {

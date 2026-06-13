@@ -1,7 +1,7 @@
 import { useAuthStore } from '../stores'
 import type { Backup, Server } from '../types/server'
 
-function getAuthHeaders(): HeadersInit {
+export function getAuthHeaders(): HeadersInit {
   // Use store's token as single source of truth
   const token = useAuthStore.getState().token
   return token ? { Authorization: `Bearer ${token}` } : {}
@@ -147,6 +147,37 @@ export async function fetchServerTypes(): Promise<ServerType[]> {
 
 export async function fetchVersions(type: string): Promise<string[]> {
   const res = await fetch(`/api/server-types/${type}/versions`, {
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error('Failed to fetch versions')
+  const data = await res.json()
+  return data.versions
+}
+
+// System
+export interface SystemInfo {
+  portRange?: { min: number; max: number }
+}
+
+export async function fetchSystemInfo(): Promise<SystemInfo> {
+  const res = await fetch('/api/system/info', {
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error('Failed to fetch system info')
+  return res.json()
+}
+
+export async function fetchSystemServerTypes(): Promise<ServerType[]> {
+  const res = await fetch('/api/system/server-types', {
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error('Failed to fetch server types')
+  const data = await res.json()
+  return data.types
+}
+
+export async function fetchSystemVersions(type: string): Promise<string[]> {
+  const res = await fetch(`/api/system/versions/${type}`, {
     headers: getAuthHeaders(),
   })
   if (!res.ok) throw new Error('Failed to fetch versions')

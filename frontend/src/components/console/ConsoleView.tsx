@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { type LogEntry, type ServerMetrics, useWebSocket } from '@/hooks/useWebSocket'
+import { sendCommand as sendCommandApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ConsoleViewProps {
@@ -69,15 +70,7 @@ export function ConsoleView({ serverId, serverName: _serverName, serverState, la
     if (!command.trim()) return
 
     try {
-      const token = localStorage.getItem('token')
-      await fetch(`/api/servers/${serverId}/command`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ command: command.trim() }),
-      })
+      await sendCommandApi(serverId, command.trim())
       setCommand('')
     } catch (_err) {}
   }

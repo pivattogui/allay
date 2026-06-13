@@ -19,13 +19,23 @@ export function SetupPage() {
     e.preventDefault()
     setError('')
 
+    if (!/^[a-zA-Z0-9_.-]+$/.test(username)) {
+      setError('Username may only contain letters, numbers, and . _ -')
+      return
+    }
+
+    if (username.length < 3 || username.length > 32) {
+      setError('Username must be between 3 and 32 characters')
+      return
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       return
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password.length < 8 || password.length > 72) {
+      setError('Password must be between 8 and 72 characters')
       return
     }
 
@@ -79,6 +89,8 @@ export function SetupPage() {
                     placeholder="Choose a username"
                     required
                     minLength={3}
+                    maxLength={32}
+                    pattern="[a-zA-Z0-9_.\-]+"
                     autoComplete="username"
                     disabled={loading}
                   />
@@ -99,7 +111,8 @@ export function SetupPage() {
                     className="pl-10"
                     placeholder="Create a password"
                     required
-                    minLength={6}
+                    minLength={8}
+                    maxLength={72}
                     autoComplete="new-password"
                     disabled={loading}
                   />

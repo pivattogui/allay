@@ -1,6 +1,8 @@
+import { type Channel as PhoenixChannel, Socket } from 'phoenix'
 import { create } from 'zustand'
 import { queryClient } from '../lib/queryClient'
 import { serverKeys } from '../lib/queryKeys'
+import { useAuthStore } from './authStore'
 
 export interface LogEntry {
   timestamp: string
@@ -24,25 +26,18 @@ export interface ServerStatus {
   lastError?: string
 }
 
+// Kept for API compatibility with useWebSocket; phoenix delivers all event
+// types on a single topic, so the selection is no longer wire-significant.
 type Channel = 'logs' | 'metrics' | 'status'
 
-interface WSMessage {
-  type: 'log' | 'metrics' | 'status' | 'subscribed' | 'unsubscribed' | 'error'
-  serverId?: string
-  data?: LogEntry | ServerMetrics | ServerStatus
-  channels?: string[]
-  message?: string
-}
-
-// Estados terminais que justificam invalidação
+// Terminal states that justify a server-list invalidation.
 const TERMINAL_STATES = ['running', 'stopped', 'crashed'] as const
 
 interface WebSocketState {
-  ws: WebSocket | null
+  socket: Socket | null
+  channel: PhoenixChannel | null
   isConnected: boolean
-  isReconnecting: boolean
   currentSubscription: { serverId: string; channels: Channel[] } | null
-  reconnectTimeoutId: ReturnType<typeof setTimeout> | null
   invalidationTimeoutId: ReturnType<typeof setTimeout> | null
 
   // Callbacks for consumers
@@ -51,7 +46,6 @@ interface WebSocketState {
   onStatus: ((status: ServerStatus) => void) | null
 
   // Actions
-  ensureConnection: () => void
   subscribe: (serverId: string, channels: Channel[]) => void
   unsubscribe: () => void
   setCallbacks: (callbacks: {
@@ -59,15 +53,31 @@ interface WebSocketState {
     onMetrics?: (metrics: ServerMetrics) => void
     onStatus?: (status: ServerStatus) => void
   }) => void
-  sendCommand: (command: string) => void
+}
+
+// Builds (once) the shared phoenix Socket. The token is read at build time;
+// a re-login mid-session would need a reconnect, which is acceptable because
+// login navigates/reloads the app.
+function ensureSocket(get: () => WebSocketState, set: (partial: Partial<WebSocketState>) => void): Socket {
+  const existing = get().socket
+  if (existing) return existing
+
+  const token = useAuthStore.getState().token
+  const socket = new Socket('/socket', { params: { token } })
+  socket.onOpen(() => set({ isConnected: true }))
+  socket.onClose(() => set({ isConnected: false }))
+  socket.onError(() => set({ isConnected: false }))
+  socket.connect()
+
+  set({ socket })
+  return socket
 }
 
 export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
-  ws: null,
+  socket: null,
+  channel: null,
   isConnected: false,
-  isReconnecting: false,
   currentSubscription: null,
-  reconnectTimeoutId: null,
   invalidationTimeoutId: null,
   onLog: null,
   onMetrics: null,
@@ -81,155 +91,53 @@ export const useWebSocketStore = create<WebSocketState>()((set, get) => ({
     })
   },
 
-  // Garante que existe uma conexão WebSocket (cria se não existir)
-  ensureConnection: () => {
-    const state = get()
-
-    // Já conectado ou conectando
-    if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) {
-      return
-    }
-
-    // Limpa timeout de reconexão anterior
-    if (state.reconnectTimeoutId) {
-      clearTimeout(state.reconnectTimeoutId)
-      set({ reconnectTimeoutId: null })
-    }
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws`
-
-    const ws = new WebSocket(wsUrl)
-
-    ws.onopen = () => {
-      const currentState = get()
-      set({ isConnected: true, isReconnecting: false })
-
-      // Se já tinha uma subscrição pendente, reenvia
-      if (currentState.currentSubscription) {
-        ws.send(
-          JSON.stringify({
-            type: 'subscribe',
-            serverId: currentState.currentSubscription.serverId,
-            channels: currentState.currentSubscription.channels,
-          }),
-        )
-      }
-    }
-
-    ws.onmessage = (event) => {
-      const currentState = get()
-
-      try {
-        const message: WSMessage = JSON.parse(event.data)
-
-        switch (message.type) {
-          case 'log':
-            if (message.data && currentState.onLog) {
-              currentState.onLog(message.data as LogEntry)
-            }
-            break
-
-          case 'metrics':
-            if (message.data && currentState.onMetrics) {
-              currentState.onMetrics(message.data as ServerMetrics)
-            }
-            break
-
-          case 'status': {
-            if (message.data && currentState.onStatus) {
-              currentState.onStatus(message.data as ServerStatus)
-            }
-
-            // Invalidate queries for terminal states
-            const status = message.data as ServerStatus
-            if (TERMINAL_STATES.includes(status.state as (typeof TERMINAL_STATES)[number])) {
-              if (currentState.invalidationTimeoutId) {
-                clearTimeout(currentState.invalidationTimeoutId)
-              }
-              const timeoutId = setTimeout(() => {
-                queryClient.invalidateQueries({
-                  queryKey: serverKeys.all,
-                  refetchType: 'active',
-                })
-                set({ invalidationTimeoutId: null })
-              }, 500)
-              set({ invalidationTimeoutId: timeoutId })
-            }
-            break
-          }
-        }
-      } catch (_err) {}
-    }
-
-    ws.onclose = () => {
-      set({ isConnected: false, ws: null })
-
-      // Reconecta após 3 segundos
-      const timeoutId = setTimeout(() => {
-        set({ isReconnecting: true })
-        get().ensureConnection()
-      }, 3000)
-
-      set({ reconnectTimeoutId: timeoutId })
-    }
-
-    ws.onerror = (_err) => {}
-
-    set({ ws })
-  },
-
-  // Muda a subscrição para um servidor específico (reutiliza conexão existente)
+  // Joins the per-server topic. The backend pushes a status snapshot + last-50
+  // log replay on join; those arrive as normal "status"/"log" events.
   subscribe: (serverId: string, channels: Channel[]) => {
-    // Garante que existe conexão
-    get().ensureConnection()
+    const socket = ensureSocket(get, set)
 
-    // Pega estado APÓS ensureConnection (pode ter criado novo ws)
-    const state = get()
-
-    // Atualiza subscrição no estado
-    set({ currentSubscription: { serverId, channels } })
-
-    // Se WebSocket está aberto, envia subscribe (sempre envia para receber dados atuais)
-    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          serverId,
-          channels,
-        }),
-      )
+    const previous = get().channel
+    if (previous) {
+      previous.leave()
     }
-    // Se ainda está conectando, o onopen vai enviar o subscribe
+
+    const channel = socket.channel(`server:${serverId}`, {})
+
+    channel.on('log', (log: LogEntry) => {
+      get().onLog?.(log)
+    })
+
+    channel.on('metrics', (metrics: ServerMetrics) => {
+      get().onMetrics?.(metrics)
+    })
+
+    channel.on('status', (status: ServerStatus) => {
+      get().onStatus?.(status)
+
+      if (TERMINAL_STATES.includes(status.state as (typeof TERMINAL_STATES)[number])) {
+        const pending = get().invalidationTimeoutId
+        if (pending) clearTimeout(pending)
+        const timeoutId = setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: serverKeys.all,
+            refetchType: 'active',
+          })
+          set({ invalidationTimeoutId: null })
+        }, 500)
+        set({ invalidationTimeoutId: timeoutId })
+      }
+    })
+
+    channel.join().receive('ok', () => set({ isConnected: true }))
+
+    set({ channel, currentSubscription: { serverId, channels } })
   },
 
-  // Remove a subscrição atual (não fecha a conexão)
   unsubscribe: () => {
-    const state = get()
-
-    if (state.ws && state.ws.readyState === WebSocket.OPEN && state.currentSubscription) {
-      state.ws.send(
-        JSON.stringify({
-          type: 'unsubscribe',
-          serverId: state.currentSubscription.serverId,
-          channels: state.currentSubscription.channels,
-        }),
-      )
+    const channel = get().channel
+    if (channel) {
+      channel.leave()
     }
-
-    set({ currentSubscription: null })
-  },
-
-  sendCommand: (command: string) => {
-    const state = get()
-    if (state.ws && state.ws.readyState === WebSocket.OPEN && state.currentSubscription) {
-      state.ws.send(
-        JSON.stringify({
-          type: 'command',
-          serverId: state.currentSubscription.serverId,
-          command,
-        }),
-      )
-    }
+    set({ channel: null, currentSubscription: null })
   },
 }))
