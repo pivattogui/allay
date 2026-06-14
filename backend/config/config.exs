@@ -40,6 +40,11 @@ config :allay, :data_dir, "data"
 
 config :allay, :mc_port_range, 25_565..25_575
 
+# JDK install roots scanned at boot for available Java majors. These are the
+# Linux locations the release image populates (Temurin debs). Native dev on
+# macOS/asdf/Homebrew overrides this with JAVA_SCAN_DIRS in runtime.exs.
+config :allay, :java_scan_dirs, ["/opt/java", "/usr/lib/jvm"]
+
 config :allay, Oban,
   engine: Oban.Engines.Basic,
   repo: Allay.Repo,

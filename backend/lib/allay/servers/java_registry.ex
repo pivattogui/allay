@@ -16,9 +16,15 @@ defmodule Allay.Servers.JavaRegistry do
     Agent.start_link(fn -> runtimes end, name: __MODULE__)
   end
 
-  @doc "Runs JavaRuntime.discover/0 and stores the result. Returns the map."
+  @doc """
+  Discovers runtimes under the configured scan dirs and stores them. Returns
+  the map. Scan dirs come from `:java_scan_dirs` (the Linux JDK locations the
+  release image populates; override with JAVA_SCAN_DIRS for native dev, e.g. an
+  asdf/Homebrew install root).
+  """
   def discover do
-    runtimes = JavaRuntime.discover()
+    scan_dirs = Application.get_env(:allay, :java_scan_dirs, JavaRuntime.default_scan_dirs())
+    runtimes = JavaRuntime.discover(scan_dirs)
     put(runtimes)
     runtimes
   end

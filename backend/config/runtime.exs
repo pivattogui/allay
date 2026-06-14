@@ -35,6 +35,12 @@ if config_env() != :test do
   if mc_port_min && mc_port_max do
     config :allay, :mc_port_range, mc_port_min..mc_port_max
   end
+
+  # Colon-separated JDK install roots (e.g. an asdf/Homebrew root for native
+  # dev). Each is scanned for `<entry>/bin/java`. Overrides the Linux defaults.
+  if scan_dirs = env!("JAVA_SCAN_DIRS", :string, nil) do
+    config :allay, :java_scan_dirs, String.split(scan_dirs, ":", trim: true)
+  end
 end
 
 if config_env() == :dev do
