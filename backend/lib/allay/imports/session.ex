@@ -92,6 +92,20 @@ defmodule Allay.Imports.Session do
   end
 
   @doc """
+  Begins a streaming upload: creates a fresh `import-{uuid}` directory and
+  returns `{:ok, import_id, dest_path}` for the caller to stream the archive
+  into. Only the basename of `filename` is used (path-traversal safe).
+  """
+  @spec start_upload(String.t(), keyword()) :: {:ok, String.t(), String.t()}
+  def start_upload(filename, opts \\ []) do
+    import_id = Ecto.UUID.generate()
+    dir = import_dir(import_id, opts)
+    File.mkdir_p!(dir)
+    dest = Path.join(dir, Path.basename(filename))
+    {:ok, import_id, dest}
+  end
+
+  @doc """
   Removes the session directory for `import_id`. Idempotent.
   """
   @spec delete(String.t(), keyword()) :: :ok

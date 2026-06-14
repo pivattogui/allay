@@ -99,6 +99,27 @@ defmodule Allay.Imports.SessionTest do
     end
   end
 
+  describe "start_upload/2" do
+    test "creates the import dir and returns the destination path" do
+      dir = Path.join(System.tmp_dir!(), "sess-#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      assert {:ok, import_id, dest} = Session.start_upload("World Backup.zip", data_dir: dir)
+
+      assert is_binary(import_id)
+      assert dest == Path.join([dir, "temp", "import-#{import_id}", "World Backup.zip"])
+      assert File.dir?(Path.dirname(dest))
+    end
+
+    test "keeps only the basename of the filename" do
+      dir = Path.join(System.tmp_dir!(), "sess-#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      assert {:ok, _id, dest} = Session.start_upload("../../etc/evil.zip", data_dir: dir)
+      assert Path.basename(dest) == "evil.zip"
+    end
+  end
+
   describe "delete/2" do
     test "removes the import dir" do
       dir = data_dir()
