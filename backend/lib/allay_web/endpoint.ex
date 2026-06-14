@@ -46,9 +46,11 @@ defmodule AllayWeb.Endpoint do
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
-    # 100 MiB cap — the legacy constant existed but was never enforced server-side.
-    # Oversized requests raise Plug.Parsers.RequestTooLargeError → 413.
-    length: 100 * 1024 * 1024,
+    # Generous cap for server-import archives — full world backups run to many
+    # hundreds of MB. Multipart file parts stream to a temp file on disk, so
+    # this bounds total request size, not memory. The legacy backend enforced
+    # no limit; 2 GiB is a sane homelab ceiling (override :max_upload_bytes).
+    length: Application.compile_env(:allay, :max_upload_bytes, 2 * 1024 * 1024 * 1024),
     json_decoder: Phoenix.json_library()
 
   plug Plug.MethodOverride

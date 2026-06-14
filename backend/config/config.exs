@@ -45,6 +45,10 @@ config :allay, :mc_port_range, 25_565..25_575
 # macOS/asdf/Homebrew overrides this with JAVA_SCAN_DIRS in runtime.exs.
 config :allay, :java_scan_dirs, ["/opt/java", "/usr/lib/jvm"]
 
+# Max upload size for server-import archives (read at compile time by the
+# endpoint's Plug.Parsers). Full world backups can be large; default 2 GiB.
+config :allay, :max_upload_bytes, 2 * 1024 * 1024 * 1024
+
 config :allay, Oban,
   engine: Oban.Engines.Basic,
   repo: Allay.Repo,
