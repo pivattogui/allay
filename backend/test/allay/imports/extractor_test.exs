@@ -188,7 +188,80 @@ defmodule Allay.Imports.ExtractorTest do
     end
   end
 
+  describe "extract_selection/5 — real archives with a shared root and dir entries" do
+    # Built from a real on-disk tree so the archive carries directory entries
+    # (trailing slash) and a shared root — exactly what trips a naive extractor.
+
+    test "rooted world: root re-prepended for reads, content lands under world/" do
+      archive = rooted_tar("world", %{"level.dat" => "lvl", "region/r.mca" => "reg"})
+      server_dir = server_dir()
+      # analyzer would strip "world" → normalized selection + root "world"
+      selected = ["level.dat", "region/", "region/r.mca"]
+
+      assert {:ok, _} =
+               Extractor.extract_selection(archive, selected, selected, server_dir, "world")
+
+      assert File.read!(Path.join(server_dir, "world/level.dat")) == "lvl"
+      assert File.read!(Path.join(server_dir, "world/region/r.mca")) == "reg"
+    end
+
+    test "wrapper folder: stripped root reconstructs reads, content lands at server root" do
+      archive =
+        rooted_tar("backup", %{"world/level.dat" => "lvl", "server.properties" => "props"})
+
+      server_dir = server_dir()
+      selected = ["world/", "world/level.dat", "server.properties"]
+
+      assert {:ok, _} =
+               Extractor.extract_selection(archive, selected, selected, server_dir, "backup")
+
+      assert File.read!(Path.join(server_dir, "world/level.dat")) == "lvl"
+      assert File.read!(Path.join(server_dir, "server.properties")) == "props"
+    end
+
+    test "directory entries with a trailing slash are not rejected as traversal" do
+      archive = rooted_tar("world", %{"region/r.mca" => "reg"})
+      server_dir = server_dir()
+      # "region/" is a directory entry — the old `path == sanitize(path)` check
+      # wrongly rejected it as :invalid_path. No level.dat here, so no world
+      # wrap; the point is the dir entry is accepted and its file extracted.
+      selected = ["region/", "region/r.mca"]
+
+      assert {:ok, _} =
+               Extractor.extract_selection(archive, selected, selected, server_dir, "world")
+
+      assert File.read!(Path.join(server_dir, "region/r.mca")) == "reg"
+    end
+  end
+
   # ── helpers ──────────────────────────────────────────────────────────────
+
+  # Builds a real .tar.gz from an on-disk tree rooted at `root/`, so the archive
+  # contains directory entries and a shared root component.
+  defp rooted_tar(root, files) do
+    scratch = Path.join(System.tmp_dir!(), "rooted_#{System.unique_integer([:positive])}")
+    root_dir = Path.join(scratch, root)
+
+    Enum.each(files, fn {name, content} ->
+      dest = Path.join(root_dir, name)
+      File.mkdir_p!(Path.dirname(dest))
+      File.write!(dest, content)
+    end)
+
+    path = Path.join(System.tmp_dir!(), "rt_#{System.unique_integer([:positive])}.tar.gz")
+
+    :ok =
+      :erl_tar.create(to_charlist(path), [{to_charlist(root), to_charlist(root_dir)}], [
+        :compressed
+      ])
+
+    on_exit(fn ->
+      File.rm_rf(scratch)
+      File.rm(path)
+    end)
+
+    path
+  end
 
   defp server_dir do
     dir = Path.join(System.tmp_dir!(), "extract_dest_#{System.unique_integer([:positive])}")

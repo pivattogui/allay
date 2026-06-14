@@ -121,27 +121,38 @@ defmodule Allay.Imports.Analyzer do
   """
   @spec normalize([String.t()]) :: [String.t()]
   def normalize(raw) do
-    raw
-    |> strip_macosx()
-    |> strip_single_root()
+    cleaned = strip_macosx(raw)
+
+    case shared_root(cleaned) do
+      nil ->
+        Enum.reject(cleaned, &(&1 == "" or &1 == "./"))
+
+      root ->
+        cleaned
+        |> Enum.map(&strip_root_prefix(&1, root))
+        |> Enum.reject(&(&1 == "" or &1 == "./"))
+    end
+  end
+
+  @doc """
+  The single directory component shared by every entry, or `nil` when there is
+  no common root. This is exactly the prefix `normalize/1` strips; extraction
+  must re-prepend it to read members back from the archive (the archive holds
+  the raw, un-stripped names).
+  """
+  @spec shared_root([String.t()]) :: String.t() | nil
+  def shared_root(raw) do
+    case raw |> strip_macosx() |> Enum.reject(&(&1 == "" or &1 == "./")) do
+      [] ->
+        nil
+
+      [first | _] = non_empty ->
+        root = root_component(first)
+        if root != "" and Enum.all?(non_empty, &(root_component(&1) == root)), do: root, else: nil
+    end
   end
 
   defp strip_macosx(entries), do: Enum.reject(entries, &String.starts_with?(&1, "__MACOSX"))
-
-  defp strip_single_root(entries) do
-    case Enum.reject(entries, &(&1 == "" or &1 == "./")) do
-      [] -> entries
-      [first | _] = non_empty -> strip_shared_root(entries, non_empty, root_component(first))
-    end
-  end
-
-  defp strip_shared_root(entries, non_empty, root) do
-    if Enum.all?(non_empty, &(root_component(&1) == root)) do
-      Enum.map(non_empty, &strip_root_prefix(&1, root))
-    else
-      entries
-    end
-  end
 
   defp root_component(entry), do: entry |> String.split("/") |> hd()
 
@@ -330,7 +341,8 @@ defmodule Allay.Imports.Analyzer do
              categories: categories(),
              suggested_preset: String.t() | nil,
              total_size: non_neg_integer(),
-             entries: [String.t()]
+             entries: [String.t()],
+             root: String.t() | nil
            }}
           | {:error, term()}
   def analyze(archive_path) do
@@ -345,7 +357,8 @@ defmodule Allay.Imports.Analyzer do
          categories: categories,
          suggested_preset: suggest_preset(detected_type),
          total_size: File.stat!(archive_path).size,
-         entries: entries
+         entries: entries,
+         root: shared_root(raw)
        }}
     end
   end

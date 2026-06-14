@@ -94,13 +94,15 @@ defmodule Allay.Imports do
 
   defp run_import(ctx) do
     %{server: server, analysis: analysis, selected: selected, backup: backup} = ctx
-    delete_selected_world_dirs(server.directory, analysis.categories.world, selected)
+    needs_wrap = Extractor.needs_world_wrap?(analysis.entries, selected)
+    delete_selected_world_dirs(server.directory, analysis.categories.world, selected, needs_wrap)
 
     case Extractor.extract_selection(
            ctx.archive_path,
            analysis.entries,
            selected,
-           server.directory
+           server.directory,
+           analysis.root
          ) do
       {:ok, imported_paths} ->
         reinject_rcon(server, imported_paths)
@@ -114,14 +116,18 @@ defmodule Allay.Imports do
   end
 
   # Only world prefixes that are actually part of the selection are cleared, so
-  # a selective re-import of one dimension never wipes the others.
-  defp delete_selected_world_dirs(server_dir, world_prefixes, selected) do
+  # a selective re-import of one dimension never wipes the others. The cleared
+  # location matches where extraction writes (world-wrapped for a bare-world
+  # layout), so a re-import replaces the old world rather than stranding it.
+  defp delete_selected_world_dirs(server_dir, world_prefixes, selected, needs_wrap) do
     world_prefixes
     |> Enum.filter(fn prefix ->
       String.ends_with?(prefix, "/") and Enum.any?(selected, &String.starts_with?(&1, prefix))
     end)
     |> Enum.each(fn prefix ->
-      case PathSandbox.resolve(server_dir, prefix) do
+      dest_prefix = if needs_wrap, do: Path.join("world", prefix), else: prefix
+
+      case PathSandbox.resolve(server_dir, dest_prefix) do
         {:ok, full, _rel} -> File.rm_rf(full)
         {:error, _} -> :ok
       end

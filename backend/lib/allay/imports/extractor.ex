@@ -87,48 +87,68 @@ defmodule Allay.Imports.Extractor do
   `server_dir`) or `{:error, reason}`. A path resolving outside the sandbox
   aborts with `{:error, :invalid_path}`.
   """
-  @spec extract_selection(String.t(), [String.t()], [String.t()], String.t()) ::
+  @spec extract_selection(String.t(), [String.t()], [String.t()], String.t(), String.t() | nil) ::
           {:ok, [String.t()]} | {:error, term()}
-  def extract_selection(_archive_path, _original_entries, [], _server_dir), do: {:ok, []}
+  def extract_selection(archive_path, original_entries, selected_paths, server_dir, root \\ nil)
 
-  def extract_selection(archive_path, original_entries, selected_paths, server_dir) do
+  def extract_selection(_archive_path, _original_entries, [], _server_dir, _root), do: {:ok, []}
+
+  def extract_selection(archive_path, original_entries, selected_paths, server_dir, root) do
     needs_wrap = world_wrap?(original_entries, selected_paths)
-    dest_rels = Enum.map(selected_paths, &wrapped_rel(&1, needs_wrap))
 
-    with :ok <- reject_unsafe_entries(selected_paths),
-         :ok <- validate_destinations(dest_rels, server_dir) do
-      do_extract(archive_path, selected_paths, server_dir, needs_wrap)
+    # Each selected path is normalized (root stripped). `member` is its name in
+    # the archive (root re-prepended); `dest` is where it lands under the server
+    # dir (world-wrapped for a bare-world layout). Reading by raw name and
+    # writing by dest is what makes a rooted "world/" archive land correctly.
+    plan =
+      Enum.map(selected_paths, fn path ->
+        %{member: prepend_root(path, root), dest: wrapped_rel(path, needs_wrap)}
+      end)
+
+    with :ok <- reject_unsafe(plan),
+         :ok <- validate_destinations(Enum.map(plan, & &1.dest), server_dir) do
+      do_extract(archive_path, plan, server_dir)
     end
   end
 
-  # The extractors below write entries by their RAW archive name (`:files`/
-  # `:file_list` + `File.cp_r!`), so any traversal in the name escapes the
-  # sandbox even though `validate_destinations/2` sanitizes before checking.
-  # A legitimate archive entry never needs `..` or a leading slash; refuse the
-  # whole import on any that does. `:erl_tar` guards itself, but `:zip` does
-  # not — this closes the zip path and removes the false safety of validating
-  # a sanitized form while extracting the raw one.
-  defp reject_unsafe_entries(selected_paths) do
-    if Enum.all?(selected_paths, &safe_entry?/1),
+  defp prepend_root(path, nil), do: path
+  defp prepend_root(path, root), do: root <> "/" <> path
+
+  # Reject only genuine traversal — a `..` segment or an absolute path. Trailing
+  # slashes (directory entries like "region/") are safe and must be allowed;
+  # checking `path == sanitize(path)` wrongly rejected them.
+  defp reject_unsafe(plan) do
+    safe? = fn p -> not String.starts_with?(p, "/") and ".." not in String.split(p, "/") end
+
+    if Enum.all?(plan, fn %{member: m, dest: d} -> safe?.(m) and safe?.(d) end),
       do: :ok,
       else: {:error, :invalid_path}
   end
 
-  defp safe_entry?(path) do
-    path == PathSandbox.sanitize(path)
-  end
-
-  defp world_wrap?(original_entries, selected_paths) do
+  @doc """
+  Whether a bare-world layout (archive root holds `level.dat`) means the
+  selection must be placed under `world/`. Exposed so the orchestration clears
+  the same destination it will write to.
+  """
+  @spec needs_world_wrap?([String.t()], [String.t()]) :: boolean()
+  def needs_world_wrap?(original_entries, selected_paths) do
     "level.dat" in original_entries and
       not Enum.any?(selected_paths, &String.starts_with?(&1, "world/"))
   end
 
+  defp world_wrap?(original_entries, selected_paths),
+    do: needs_world_wrap?(original_entries, selected_paths)
+
   defp wrapped_rel(path, true), do: Path.join("world", path)
   defp wrapped_rel(path, false), do: path
 
-  # Re-validate every destination through the sandbox. The server dir must exist
-  # (PathSandbox.resolve requires it); the orchestration creates it beforehand.
+  # Defense-in-depth: every destination must resolve inside the server dir. The
+  # server dir must exist (PathSandbox.resolve requires it); do_extract also
+  # ensures it. Combined with reject_unsafe (which catches `..` before sanitize
+  # neutralizes it), destinations cannot escape.
   defp validate_destinations(dest_rels, server_dir) do
+    File.mkdir_p!(server_dir)
+
     Enum.reduce_while(dest_rels, :ok, fn rel, :ok ->
       case PathSandbox.resolve(server_dir, rel) do
         {:ok, _full, _rel} -> {:cont, :ok}
@@ -137,101 +157,63 @@ defmodule Allay.Imports.Extractor do
     end)
   end
 
-  defp do_extract(archive_path, selected_paths, server_dir, needs_wrap) do
+  # Extract the selected members (raw archive names) into a temp dir on the same
+  # filesystem, then move each into place by its destination. Going through temp
+  # keeps the raw archive paths intact for the reader while letting us place
+  # them at the (possibly world-wrapped) destination.
+  defp do_extract(archive_path, plan, server_dir) do
     File.mkdir_p!(server_dir)
+    temp = mkdtemp(server_dir, "extract-")
+
+    try do
+      with :ok <- extract_members(archive_path, Enum.map(plan, & &1.member), temp) do
+        Enum.each(plan, fn %{member: member, dest: dest} ->
+          src = Path.join(temp, member)
+          if File.exists?(src), do: place(src, Path.join(server_dir, dest))
+        end)
+
+        {:ok, Enum.map(plan, & &1.dest)}
+      end
+    after
+      File.rm_rf(temp)
+    end
+  end
+
+  defp extract_members(archive_path, members, temp) do
+    charlists = Enum.map(members, &to_charlist/1)
 
     if zip?(archive_path) do
-      extract_zip(archive_path, selected_paths, server_dir, needs_wrap)
+      case :zip.extract(to_charlist(archive_path), [
+             {:cwd, to_charlist(temp)},
+             {:file_list, charlists}
+           ]) do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
     else
-      extract_tar(archive_path, selected_paths, server_dir, needs_wrap)
+      case :erl_tar.extract(to_charlist(archive_path), [
+             :compressed,
+             {:cwd, to_charlist(temp)},
+             {:files, charlists}
+           ]) do
+        :ok -> :ok
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
   defp zip?(path), do: String.ends_with?(String.downcase(path), ".zip")
 
-  # ── tar ──────────────────────────────────────────────────────────────────
-
-  defp extract_tar(archive_path, selected_paths, server_dir, false) do
-    files = Enum.map(selected_paths, &to_charlist/1)
-
-    case :erl_tar.extract(to_charlist(archive_path), [
-           :compressed,
-           {:cwd, to_charlist(server_dir)},
-           {:files, files}
-         ]) do
-      :ok -> {:ok, selected_paths}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp extract_tar(archive_path, selected_paths, server_dir, true) do
-    temp = mkdtemp(server_dir, "tar-extract-")
-
-    try do
-      files = Enum.map(selected_paths, &to_charlist/1)
-
-      case :erl_tar.extract(to_charlist(archive_path), [
-             :compressed,
-             {:cwd, to_charlist(temp)},
-             {:files, files}
-           ]) do
-        :ok -> move_under_world(temp, server_dir, selected_paths)
-        {:error, reason} -> {:error, reason}
-      end
-    after
-      File.rm_rf(temp)
-    end
-  end
-
-  # ── zip ────────────────────────────────────────────────────────────────────
-
-  defp extract_zip(archive_path, selected_paths, server_dir, needs_wrap) do
-    temp = mkdtemp(server_dir, "zip-extract-")
-
-    try do
-      file_list = Enum.map(selected_paths, &to_charlist/1)
-
-      case :zip.extract(to_charlist(archive_path), [
-             {:cwd, to_charlist(temp)},
-             {:file_list, file_list}
-           ]) do
-        {:ok, _files} -> place_zip_output(temp, server_dir, selected_paths, needs_wrap)
-        {:error, reason} -> {:error, reason}
-      end
-    after
-      File.rm_rf(temp)
-    end
-  end
-
-  defp place_zip_output(temp, server_dir, selected_paths, needs_wrap) do
-    base = if needs_wrap, do: Path.join(server_dir, "world"), else: server_dir
-
-    Enum.each(selected_paths, fn rel ->
-      src = Path.join(temp, rel)
-      dest = Path.join(base, rel)
-      if File.exists?(src), do: copy_into(src, dest)
-    end)
-
-    {:ok, Enum.map(selected_paths, &wrapped_rel(&1, needs_wrap))}
-  end
-
-  # ── shared helpers ─────────────────────────────────────────────────────────
-
-  defp move_under_world(temp, server_dir, selected_paths) do
-    world_dir = Path.join(server_dir, "world")
-
-    Enum.each(selected_paths, fn rel ->
-      src = Path.join(temp, rel)
-      dest = Path.join(world_dir, rel)
-      if File.exists?(src), do: copy_into(src, dest)
-    end)
-
-    {:ok, Enum.map(selected_paths, &Path.join("world", &1))}
-  end
-
-  defp copy_into(src, dest) do
+  # Move temp → dest. Same filesystem (temp is under server_dir), so rename is
+  # O(1) for a multi-GB world; fall back to copy across devices. A parent dir
+  # already moved leaves no src — the File.exists? guard skips it.
+  defp place(src, dest) do
     File.mkdir_p!(Path.dirname(dest))
-    File.cp_r!(src, dest)
+
+    case File.rename(src, dest) do
+      :ok -> :ok
+      {:error, _} -> File.cp_r!(src, dest)
+    end
   end
 
   defp mkdtemp(parent, prefix) do
