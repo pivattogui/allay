@@ -289,8 +289,6 @@ export function analyzeImport(
 ): Promise<ImportAnalysis> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    const formData = new FormData()
-    formData.append('file', file)
 
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable && onProgress) {
@@ -316,10 +314,10 @@ export function analyzeImport(
 
     xhr.open('POST', `/api/backups/${serverId}/import/analyze`)
     const token = useAuthStore.getState().token
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-    }
-    xhr.send(formData)
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    xhr.setRequestHeader('x-filename', encodeURIComponent(file.name))
+    xhr.send(file)
   })
 }
 
