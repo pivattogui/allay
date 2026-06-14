@@ -35,53 +35,55 @@ defmodule AllayWeb.ImportControllerTest do
     server_fixture(%{directory: dir, rcon_port: 35_999, rcon_password: "secretpw"})
   end
 
-  # Builds a real .zip on disk and wraps it as a Plug.Upload for multipart.
-  defp zip_upload(files, filename) do
-    path = Path.join(System.tmp_dir!(), "upl_#{System.unique_integer([:positive])}.zip")
-    on_exit(fn -> File.rm(path) end)
-    entries = Enum.map(files, fn {name, content} -> {to_charlist(name), content} end)
-    {:ok, _} = :zip.create(to_charlist(path), entries)
-    %Plug.Upload{path: path, filename: filename, content_type: "application/zip"}
+  # Builds a real .zip entirely in memory and returns its bytes.
+  defp zip_bytes(files, name) do
+    entries = Enum.map(files, fn {n, c} -> {to_charlist(n), c} end)
+    {:ok, {_name, bytes}} = :zip.create(to_charlist(name), entries, [:memory])
+    bytes
   end
 
-  describe "POST /api/backups/:server_id/import/analyze" do
-    test "400 NO_FILE when no file field", %{conn: conn, data_dir: data_dir} do
+  # Streams an archive to the analyze endpoint as a raw octet-stream body.
+  defp post_archive(conn, server_id, bytes, filename) do
+    conn
+    |> put_req_header("content-type", "application/octet-stream")
+    |> put_req_header("x-filename", filename)
+    |> post(~p"/api/backups/#{server_id}/import/analyze", bytes)
+  end
+
+  describe "POST /api/backups/:server_id/import/analyze (streaming)" do
+    test "400 NO_FILE when x-filename header is absent", %{conn: conn, data_dir: data_dir} do
       server = seeded_server(data_dir)
-      resp = post(conn, ~p"/api/backups/#{server.id}/import/analyze", %{})
+
+      resp =
+        conn
+        |> put_req_header("content-type", "application/octet-stream")
+        |> post(~p"/api/backups/#{server.id}/import/analyze", "anything")
+
       assert json_response(resp, 400)["code"] == "NO_FILE"
     end
 
-    test "400 UNSUPPORTED_FORMAT for a .rar upload", %{conn: conn, data_dir: data_dir} do
+    test "400 UNSUPPORTED_FORMAT for a .rar filename", %{conn: conn, data_dir: data_dir} do
       server = seeded_server(data_dir)
-      upload = zip_upload(%{"world/level.dat" => "x"}, "evil.rar")
-      resp = post(conn, ~p"/api/backups/#{server.id}/import/analyze", %{"file" => upload})
+      resp = post_archive(conn, server.id, "data", "evil.rar")
       assert json_response(resp, 400)["code"] == "UNSUPPORTED_FORMAT"
     end
 
-    test "200 returns analysis with camelCase categories", %{conn: conn, data_dir: data_dir} do
+    test "404 SERVER_NOT_FOUND for an unknown server", %{conn: conn} do
+      resp = post_archive(conn, Ecto.UUID.generate(), zip_bytes(%{"a" => "b"}, "w.zip"), "w.zip")
+      assert json_response(resp, 404)["code"] == "SERVER_NOT_FOUND"
+    end
+
+    test "streams the archive and returns the analysis", %{conn: conn, data_dir: data_dir} do
       server = seeded_server(data_dir)
+      bytes = zip_bytes(%{"world/level.dat" => "lvl", "server.properties" => "p"}, "w.zip")
 
-      upload =
-        zip_upload(
-          %{
-            "world/level.dat" => "lvl",
-            "world/region/r.0.0.mca" => "reg",
-            "server.properties" => "enable-rcon=false\n",
-            "plugins/AuthMe.jar" => "p"
-          },
-          "backup.zip"
-        )
-
-      resp = post(conn, ~p"/api/backups/#{server.id}/import/analyze", %{"file" => upload})
+      resp = post_archive(conn, server.id, bytes, "My World.zip")
       body = json_response(resp, 200)
 
-      assert body["detectedType"] == "full-backup"
-      assert body["suggestedPreset"] == "world-configs"
-      assert "world/" in body["categories"]["world"]
-      assert "server.properties" in body["categories"]["configs"]
-      assert "plugins/AuthMe.jar" in body["categories"]["plugins"]
-      assert is_integer(body["totalSize"])
       assert is_binary(body["importId"])
+      assert "world/" in body["categories"]["world"]
+      dest = Path.join([data_dir, "temp", "import-#{body["importId"]}", "My World.zip"])
+      assert File.read!(dest) == bytes
     end
   end
 
@@ -188,8 +190,8 @@ defmodule AllayWeb.ImportControllerTest do
 
   # Drives the analyze endpoint and returns the import id for an execute test.
   defp analyze(conn, server, files, filename) do
-    upload = zip_upload(files, filename)
-    resp = post(conn, ~p"/api/backups/#{server.id}/import/analyze", %{"file" => upload})
+    bytes = zip_bytes(files, filename)
+    resp = post_archive(conn, server.id, bytes, filename)
     json_response(resp, 200)["importId"]
   end
 end

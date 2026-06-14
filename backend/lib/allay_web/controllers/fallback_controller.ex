@@ -208,6 +208,10 @@ defmodule AllayWeb.FallbackController do
     error(conn, :internal_server_error, "Failed to import archive", "IMPORT_FAILED")
   end
 
+  def call(conn, {:error, {:upload_failed, _reason}}) do
+    error(conn, :bad_request, "Upload failed", "UPLOAD_FAILED")
+  end
+
   # ── File browser / editor errors (legacy code vocabulary) ───────────────────
 
   def call(conn, {:error, :invalid_path}) do
