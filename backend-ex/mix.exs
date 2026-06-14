@@ -61,6 +61,7 @@ defmodule Allay.MixProject do
       {:image, "~> 0.54"},
       {:oban, "~> 2.18"},
       {:crontab, "~> 1.1"},
+      {:dotenvy, "~> 1.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
