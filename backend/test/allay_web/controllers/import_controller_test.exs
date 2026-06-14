@@ -186,6 +186,42 @@ defmodule AllayWeb.ImportControllerTest do
       # The original marker file survived the rollback intact.
       assert File.read!(Path.join(server.directory, "MARKER.txt")) == "original-marker"
     end
+
+    test "world-only import replaces the world instead of merging into it",
+         %{conn: conn, data_dir: data_dir} do
+      server = seeded_server(data_dir)
+
+      # A pre-existing world with a file the imported archive does NOT contain
+      # (player data — position/inventory). A world-only import must replace the
+      # world, so this stale file must be gone afterwards.
+      File.mkdir_p!(Path.join([server.directory, "world", "playerdata"]))
+      File.write!(Path.join([server.directory, "world", "playerdata", "steve.dat"]), "old-player")
+      File.write!(Path.join([server.directory, "world", "level.dat"]), "OLD")
+
+      import_id =
+        analyze(
+          conn,
+          server,
+          %{"world/level.dat" => "NEW", "world/region/r.5.5.mca" => "newchunk"},
+          "w.zip"
+        )
+
+      resp =
+        post(conn, ~p"/api/backups/#{server.id}/import/#{import_id}/execute", %{
+          "selection" => %{"preset" => "world-only"}
+        })
+
+      assert json_response(resp, 200)["message"] == "Import completed successfully"
+
+      # New world content is present.
+      assert File.read!(Path.join([server.directory, "world", "level.dat"])) == "NEW"
+
+      assert File.read!(Path.join([server.directory, "world", "region", "r.5.5.mca"])) ==
+               "newchunk"
+
+      # The stale old-world file is gone — replace, not merge.
+      refute File.exists?(Path.join([server.directory, "world", "playerdata", "steve.dat"]))
+    end
   end
 
   # Drives the analyze endpoint and returns the import id for an execute test.

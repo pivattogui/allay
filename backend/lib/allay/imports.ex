@@ -115,23 +115,41 @@ defmodule Allay.Imports do
     end
   end
 
-  # Only world prefixes that are actually part of the selection are cleared, so
-  # a selective re-import of one dimension never wipes the others. The cleared
-  # location matches where extraction writes (world-wrapped for a bare-world
-  # layout), so a re-import replaces the old world rather than stranding it.
+  # Importing world content must REPLACE the destination world, not merge into
+  # it — otherwise stale files the new archive lacks (player data, old region
+  # chunks) survive and the player still sees the old map. So we remove the
+  # whole destination world directory (e.g. `world/`) before extracting, not
+  # just the sub-paths the new archive happens to contain. Only world dirs that
+  # are part of this selection are cleared, so a selective re-import of one
+  # dimension never wipes the others.
   defp delete_selected_world_dirs(server_dir, world_prefixes, selected, needs_wrap) do
-    world_prefixes
-    |> Enum.filter(fn prefix ->
-      String.ends_with?(prefix, "/") and Enum.any?(selected, &String.starts_with?(&1, prefix))
-    end)
-    |> Enum.each(fn prefix ->
-      dest_prefix = if needs_wrap, do: Path.join("world", prefix), else: prefix
-
-      case PathSandbox.resolve(server_dir, dest_prefix) do
+    server_dir
+    |> destination_world_dirs(world_prefixes, selected, needs_wrap)
+    |> Enum.each(fn dir ->
+      case PathSandbox.resolve(server_dir, dir) do
         {:ok, full, _rel} -> File.rm_rf(full)
         {:error, _} -> :ok
       end
     end)
+  end
+
+  # A bare/rooted-world layout (needs_wrap) lands everything under `world/`, so
+  # the single destination dir is `world` when any world content is selected.
+  # Otherwise each selected top-level world dir (`world/`, `world_nether/`, …)
+  # is its own destination.
+  defp destination_world_dirs(_server_dir, world_prefixes, selected, true) do
+    if Enum.any?(world_prefixes, fn p -> Enum.any?(selected, &String.starts_with?(&1, p)) end),
+      do: ["world"],
+      else: []
+  end
+
+  defp destination_world_dirs(_server_dir, world_prefixes, selected, false) do
+    world_prefixes
+    |> Enum.filter(fn prefix ->
+      String.ends_with?(prefix, "/") and Enum.any?(selected, &String.starts_with?(&1, prefix))
+    end)
+    |> Enum.map(&(&1 |> String.split("/") |> hd()))
+    |> Enum.uniq()
   end
 
   defp rollback(scope, server_id, backup_id, opts) do
