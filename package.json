@@ -3,17 +3,12 @@
   "private": true,
   "packageManager": "pnpm@10.20.0",
   "scripts": {
-    "db": "docker compose up -d postgres",
-    "db:stop": "docker compose stop postgres",
-    "dev": "docker compose up -d postgres && concurrently -n be,fe -c blue,green \"pnpm -F allay-backend dev\" \"pnpm -F allay-frontend dev\"",
-    "dev:backend": "pnpm -F allay-backend dev",
+    "db": "docker compose -f docker-compose.dev.yml up -d postgres",
+    "db:stop": "docker compose -f docker-compose.dev.yml stop postgres",
     "dev:frontend": "pnpm -F allay-frontend dev",
-    "build": "pnpm -r build",
+    "build": "pnpm -F allay-frontend build",
     "lint": "biome ci .",
     "format": "biome format --write . && biome check --fix .",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
-    "test:backend": "pnpm -F allay-backend test",
     "test:frontend": "pnpm -F allay-frontend test"
   },
   "devDependencies": {

@@ -1,5 +1,0 @@
-_build
-deps
-priv/static
-*.tar
-.elixir_ls

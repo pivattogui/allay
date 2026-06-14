@@ -1,8 +1,5 @@
-node_modules
-dist
-.env
-.env.local
-*.log
-__tests__
-vitest.config.ts
-.turbo
+_build
+deps
+priv/static
+*.tar
+.elixir_ls
