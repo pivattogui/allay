@@ -2,8 +2,6 @@
 
 Self-hosted Minecraft server management platform. Create, monitor, and manage multiple Minecraft servers from a single web dashboard.
 
-See the [complete visual architecture map](ARCHITECTURE.md) for the system topology, OTP tree, modules, routes, workers, persistence model, and frontend composition.
-
 ```text
 Browser ──► Allay container ──► PostgreSQL
             Phoenix release
