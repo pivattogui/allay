@@ -1,8 +1,8 @@
-defmodule Allay.Imports do
+defmodule Allay.Servers.Import do
   @moduledoc """
-  Orchestrates the archive-import flow: analyze an uploaded archive, then
-  extract a selected subset into a live server directory behind a pre-import
-  backup that doubles as the rollback.
+  Internal orchestration for the archive-import flow: analyze an uploaded
+  archive, then extract a selected subset into a live server directory behind
+  a pre-import backup that doubles as the rollback.
 
   `execute/5` is the transactional entry point. Its ordering mirrors the legacy
   import route:
@@ -29,13 +29,36 @@ defmodule Allay.Imports do
 
   alias Allay.Accounts.Scope
   alias Allay.Backups
-  alias Allay.Files.PathSandbox
-  alias Allay.Imports.Analyzer
-  alias Allay.Imports.Extractor
-  alias Allay.Imports.Session
   alias Allay.Minecraft.Properties
   alias Allay.Runtime
   alias Allay.Servers
+  alias Allay.Servers.Files.PathSandbox
+  alias Allay.Servers.Import.Analyzer
+  alias Allay.Servers.Import.Extractor
+  alias Allay.Servers.Import.Session
+
+  @doc false
+  def begin(%Scope{} = scope, server_id, filename, opts \\ []) do
+    runtime = Keyword.get(opts, :runtime, Runtime)
+
+    with {:ok, _server} <- Servers.get_server(scope, server_id),
+         :ok <- ensure_not_busy(runtime, server_id),
+         :ok <- Session.sweep(opts) do
+      Session.start_upload(filename, opts)
+    end
+  end
+
+  @doc false
+  def analyze(import_id, opts \\ []) do
+    with {:ok, archive_path} <- Session.archive_path(import_id, opts) do
+      Analyzer.analyze(archive_path)
+    end
+  end
+
+  @doc false
+  def discard(import_id, opts \\ []) do
+    Session.delete(import_id, opts)
+  end
 
   @doc """
   Runs the import for `import_id` against `server_id` with `selection`.

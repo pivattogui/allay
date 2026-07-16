@@ -1,7 +1,7 @@
-defmodule Allay.Files.PathSandboxTest do
+defmodule Allay.Servers.Files.PathSandboxTest do
   use ExUnit.Case, async: true
 
-  alias Allay.Files.PathSandbox
+  alias Allay.Servers.Files.PathSandbox
 
   describe "sanitize/1" do
     test "strips null bytes" do

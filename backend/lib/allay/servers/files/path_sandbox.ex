@@ -1,4 +1,4 @@
-defmodule Allay.Files.PathSandbox do
+defmodule Allay.Servers.Files.PathSandbox do
   @moduledoc """
   Pure port of the legacy `file-security.ts`: path sanitization, sandbox
   containment, and the editable/sensitive/file_type flag tables for the file

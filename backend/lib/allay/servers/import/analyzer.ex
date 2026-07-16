@@ -1,4 +1,4 @@
-defmodule Allay.Imports.Analyzer do
+defmodule Allay.Servers.Import.Analyzer do
   @moduledoc """
   Inspects an uploaded archive (`.zip` / `.tar.gz` / `.tgz`) and reports which
   Minecraft artifacts it contains, the detected layout, a suggested import

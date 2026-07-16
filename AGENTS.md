@@ -53,16 +53,15 @@ Vite proxies `/api` and `/socket` to Phoenix on port 4000.
 | Module area | Responsibility |
 |---|---|
 | `Allay.Accounts` | users, API tokens, and request scopes |
-| `Allay.Servers` | persisted server configuration and lifecycle use cases |
+| `Allay.Servers` | server configuration, lifecycle, files, and import use cases |
+| `Allay.Servers.*` | internal implementations for provisioning, files, imports, and scheduling |
 | `Allay.Runtime` | public API for node-local Minecraft runtime processes |
 | `Allay.Runtime.*` | per-server supervision tree, Java Port ownership, logs, and metrics |
 | `Allay.Backups` | backup persistence, archive, retention, and restore |
-| `Allay.Files` | sandboxed server filesystem operations |
-| `Allay.Imports` | archive analysis and import execution |
 | `Allay.Minecraft.*` | version APIs, JAR cache, properties, Java discovery, and RCON |
 | `AllayWeb.*` | HTTP and Channel transport boundary only |
 
-The runtime receives a resolved `%Allay.Runtime.Spec{}` and must not read from Ecto directly. Controllers and Channels delegate domain work to contexts.
+The runtime receives a resolved `%Allay.Runtime.Spec{}` and must not read from Ecto directly. Server file and import use cases enter through `Allay.Servers`; their implementation modules remain behind that public context boundary.
 
 ## Runtime model
 

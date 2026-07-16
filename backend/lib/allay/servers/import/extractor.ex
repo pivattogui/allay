@@ -1,4 +1,4 @@
-defmodule Allay.Imports.Extractor do
+defmodule Allay.Servers.Import.Extractor do
   @moduledoc """
   Resolves an import selection into archive paths and extracts only those paths
   into a server directory, using native OTP (`:erl_tar` / `:zip`) — no shell-outs.
@@ -10,7 +10,7 @@ defmodule Allay.Imports.Extractor do
       `:erl_tar` is filtered to the regular entries selected; `:zip` cannot
       preserve symlinks at all (it materializes them as a regular file whose
       content is the link target), so a zipped symlink cannot escape the sandbox.
-    * Every selected path is re-validated through `Allay.Files.PathSandbox`
+    * Every selected path is re-validated through `Allay.Servers.Files.PathSandbox`
       before extraction; any path resolving outside `server_dir` aborts the
       whole import.
 
@@ -19,8 +19,8 @@ defmodule Allay.Imports.Extractor do
   the selection is extracted under `server_dir/world/`.
   """
 
-  alias Allay.Files.PathSandbox
-  alias Allay.Imports.Analyzer
+  alias Allay.Servers.Files.PathSandbox
+  alias Allay.Servers.Import.Analyzer
 
   @preset_categories %{
     "world-only" => [:world],

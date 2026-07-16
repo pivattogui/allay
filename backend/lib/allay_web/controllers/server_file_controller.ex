@@ -1,7 +1,7 @@
 defmodule AllayWeb.ServerFileController do
   use AllayWeb, :controller
 
-  alias Allay.Files
+  alias Allay.Servers
 
   action_fallback AllayWeb.FallbackController
 
@@ -10,7 +10,7 @@ defmodule AllayWeb.ServerFileController do
     rel = Map.get(params, "path", "")
 
     with {:ok, %{path: path, entries: entries}} <-
-           files(Files.list_entries(scope, server_id, rel)) do
+           files(Servers.list_entries(scope, server_id, rel)) do
       json(conn, %{path: path, entries: Enum.map(entries, &render_entry/1)})
     end
   end
@@ -25,7 +25,7 @@ defmodule AllayWeb.ServerFileController do
         _ -> :utf8
       end
 
-    with {:ok, info} <- files(Files.read_file(scope, server_id, rel, encoding)) do
+    with {:ok, info} <- files(Servers.read_file(scope, server_id, rel, encoding)) do
       json(conn, render_read(info))
     end
   end
@@ -36,7 +36,7 @@ defmodule AllayWeb.ServerFileController do
 
     with :ok <- require_string_content(params),
          {:ok, %{path: path, size: size, sensitive: sensitive}} <-
-           files(Files.write_file(scope, server_id, rel, params["content"])) do
+           files(Servers.write_file(scope, server_id, rel, params["content"])) do
       json(conn, %{success: true, path: path, size: size, sensitive: sensitive})
     end
   end
@@ -45,7 +45,7 @@ defmodule AllayWeb.ServerFileController do
     scope = conn.assigns.current_scope
     rel = Enum.join(path_segments, "/")
 
-    with {:ok, %{path: path}} <- files(Files.mkdir(scope, server_id, rel)) do
+    with {:ok, %{path: path}} <- files(Servers.mkdir(scope, server_id, rel)) do
       json(conn, %{success: true, path: path})
     end
   end
@@ -55,7 +55,7 @@ defmodule AllayWeb.ServerFileController do
 
     with :ok <- require_paths(params),
          {:ok, %{old_path: old_path, new_path: new_path}} <-
-           files(Files.rename_path(scope, server_id, params["oldPath"], params["newPath"])) do
+           files(Servers.rename_path(scope, server_id, params["oldPath"], params["newPath"])) do
       json(conn, %{success: true, oldPath: old_path, newPath: new_path})
     end
   end
@@ -64,7 +64,7 @@ defmodule AllayWeb.ServerFileController do
     scope = conn.assigns.current_scope
     rel = Enum.join(path_segments, "/")
 
-    with {:ok, full, basename} <- files(Files.download_path(scope, server_id, rel)) do
+    with {:ok, full, basename} <- files(Servers.download_path(scope, server_id, rel)) do
       send_download(conn, {:file, full},
         filename: basename,
         content_type: "application/octet-stream"
@@ -78,7 +78,7 @@ defmodule AllayWeb.ServerFileController do
     uploads = collect_uploads(params)
 
     with {:ok, %{uploaded: uploaded, count: count}} <-
-           files(Files.save_uploads(scope, server_id, rel_dir, uploads)) do
+           files(Servers.save_uploads(scope, server_id, rel_dir, uploads)) do
       json(conn, %{
         success: true,
         uploaded: Enum.map(uploaded, fn u -> %{name: u.name, size: u.size} end),
@@ -91,7 +91,7 @@ defmodule AllayWeb.ServerFileController do
     scope = conn.assigns.current_scope
     rel = Enum.join(path_segments, "/")
 
-    with {:ok, %{path: path, type: type}} <- files(Files.delete_path(scope, server_id, rel)) do
+    with {:ok, %{path: path, type: type}} <- files(Servers.delete_path(scope, server_id, rel)) do
       json(conn, %{success: true, path: path, type: type})
     end
   end

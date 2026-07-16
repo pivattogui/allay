@@ -1,11 +1,11 @@
-defmodule Allay.FilesTest do
+defmodule Allay.Servers.FilesTest do
   use Allay.DataCase, async: false
 
   import Allay.AccountsFixtures
   import Allay.ServersFixtures
 
   alias Allay.Accounts
-  alias Allay.Files
+  alias Allay.Servers
 
   defp scope do
     Accounts.Scope.for_user(user_fixture())
@@ -26,7 +26,7 @@ defmodule Allay.FilesTest do
   describe "server + sandbox guards (shared by every operation)" do
     test "unknown server id → {:error, :not_found}" do
       assert {:error, :not_found} =
-               Files.list_entries(scope(), Ecto.UUID.generate(), "")
+               Servers.list_entries(scope(), Ecto.UUID.generate(), "")
     end
 
     test "invalid_path from the sandbox passes through" do
@@ -34,9 +34,9 @@ defmodule Allay.FilesTest do
       # A path that resolves above the root is sanitized to "" by the sandbox,
       # so to force :invalid_path we point the server dir at a missing path.
       bad = server_fixture(%{directory: "/nonexistent/#{System.unique_integer([:positive])}"})
-      assert {:error, :invalid_path} = Files.list_entries(scope, bad.id, "")
+      assert {:error, :invalid_path} = Servers.list_entries(scope, bad.id, "")
       # And a valid server still works.
-      assert {:ok, _} = Files.list_entries(scope, server.id, "")
+      assert {:ok, _} = Servers.list_entries(scope, server.id, "")
     end
   end
 
@@ -48,7 +48,7 @@ defmodule Allay.FilesTest do
       File.mkdir_p!(Path.join(dir, "world"))
       File.mkdir_p!(Path.join(dir, "configs"))
 
-      assert {:ok, %{path: "/", entries: entries}} = Files.list_entries(scope, server.id, "")
+      assert {:ok, %{path: "/", entries: entries}} = Servers.list_entries(scope, server.id, "")
       assert Enum.map(entries, & &1.name) == ["configs", "world", "alpha.txt", "zeta.txt"]
       assert Enum.map(entries, & &1.type) == ["directory", "directory", "file", "file"]
     end
@@ -56,14 +56,14 @@ defmodule Allay.FilesTest do
     test "non-root path echoed sanitized" do
       {scope, server, dir} = seed()
       File.mkdir_p!(Path.join(dir, "plugins"))
-      assert {:ok, %{path: "plugins"}} = Files.list_entries(scope, server.id, "plugins")
+      assert {:ok, %{path: "plugins"}} = Servers.list_entries(scope, server.id, "plugins")
     end
 
     test "entry fields: file" do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "server.properties"), "x=1")
 
-      assert {:ok, %{entries: [entry]}} = Files.list_entries(scope, server.id, "")
+      assert {:ok, %{entries: [entry]}} = Servers.list_entries(scope, server.id, "")
       assert entry.name == "server.properties"
       assert entry.type == "file"
       assert entry.size == 3
@@ -78,7 +78,7 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
       File.mkdir_p!(Path.join(dir, "world"))
 
-      assert {:ok, %{entries: [entry]}} = Files.list_entries(scope, server.id, "")
+      assert {:ok, %{entries: [entry]}} = Servers.list_entries(scope, server.id, "")
       assert entry.type == "directory"
       assert entry.size == 0
       assert entry.extension == nil
@@ -89,7 +89,7 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "README"), "hi")
 
-      assert {:ok, %{entries: [entry]}} = Files.list_entries(scope, server.id, "")
+      assert {:ok, %{entries: [entry]}} = Servers.list_entries(scope, server.id, "")
       assert entry.extension == nil
     end
 
@@ -97,39 +97,39 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "eula.txt"), "eula=true")
 
-      assert {:ok, %{entries: [entry]}} = Files.list_entries(scope, server.id, "")
+      assert {:ok, %{entries: [entry]}} = Servers.list_entries(scope, server.id, "")
       assert entry.sensitive == true
     end
 
     test "missing directory → {:error, :directory_not_found}" do
       {scope, server, _dir} = seed()
-      assert {:error, :directory_not_found} = Files.list_entries(scope, server.id, "missing")
+      assert {:error, :directory_not_found} = Servers.list_entries(scope, server.id, "missing")
     end
 
     test "path that is a file → {:error, :not_a_directory}" do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "file.txt"), "x")
-      assert {:error, :not_a_directory} = Files.list_entries(scope, server.id, "file.txt")
+      assert {:error, :not_a_directory} = Servers.list_entries(scope, server.id, "file.txt")
     end
   end
 
   describe "read_file/4" do
     test "missing file → {:error, :file_not_found}" do
       {scope, server, _dir} = seed()
-      assert {:error, :file_not_found} = Files.read_file(scope, server.id, "nope.txt", :utf8)
+      assert {:error, :file_not_found} = Servers.read_file(scope, server.id, "nope.txt", :utf8)
     end
 
     test "directory → {:error, :is_directory}" do
       {scope, server, dir} = seed()
       File.mkdir_p!(Path.join(dir, "world"))
-      assert {:error, :is_directory} = Files.read_file(scope, server.id, "world", :utf8)
+      assert {:error, :is_directory} = Servers.read_file(scope, server.id, "world", :utf8)
     end
 
     test "editable utf8 read returns content and common fields" do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "server.properties"), "x=1")
 
-      assert {:ok, result} = Files.read_file(scope, server.id, "server.properties", :utf8)
+      assert {:ok, result} = Servers.read_file(scope, server.id, "server.properties", :utf8)
       assert result.path == "server.properties"
       assert result.name == "server.properties"
       assert result.size == 3
@@ -145,7 +145,7 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "icon.png"), "PNGDATA")
 
-      assert {:ok, result} = Files.read_file(scope, server.id, "icon.png", :utf8)
+      assert {:ok, result} = Servers.read_file(scope, server.id, "icon.png", :utf8)
       assert result.editable == false
       assert result.content == nil
       assert result.encoding == nil
@@ -156,7 +156,7 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "icon.png"), "PNGDATA")
 
-      assert {:ok, result} = Files.read_file(scope, server.id, "icon.png", :base64)
+      assert {:ok, result} = Servers.read_file(scope, server.id, "icon.png", :base64)
       assert result.editable == false
       assert result.encoding == "base64"
       assert result.content == Base.encode64("PNGDATA")
@@ -168,7 +168,7 @@ defmodule Allay.FilesTest do
       big = String.duplicate("a", 1_048_576 + 1)
       File.write!(Path.join(dir, "big.txt"), big)
 
-      assert {:ok, result} = Files.read_file(scope, server.id, "big.txt", :utf8)
+      assert {:ok, result} = Servers.read_file(scope, server.id, "big.txt", :utf8)
       assert result.too_large == true
       assert result.content == nil
       assert result.encoding == nil
@@ -179,7 +179,7 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "edge.txt"), String.duplicate("a", 1_048_576))
 
-      assert {:ok, result} = Files.read_file(scope, server.id, "edge.txt", :utf8)
+      assert {:ok, result} = Servers.read_file(scope, server.id, "edge.txt", :utf8)
       refute Map.get(result, :too_large)
       assert result.content != nil
     end
@@ -190,7 +190,7 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
 
       assert {:ok, result} =
-               Files.write_file(scope, server.id, "config/sub/app.yml", "key: value")
+               Servers.write_file(scope, server.id, "config/sub/app.yml", "key: value")
 
       assert result.path == "config/sub/app.yml"
       assert result.size == byte_size("key: value")
@@ -201,56 +201,59 @@ defmodule Allay.FilesTest do
     test "overwrites existing file" do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "a.txt"), "old")
-      assert {:ok, _} = Files.write_file(scope, server.id, "a.txt", "new")
+      assert {:ok, _} = Servers.write_file(scope, server.id, "a.txt", "new")
       assert File.read!(Path.join(dir, "a.txt")) == "new"
     end
 
     test "sensitive basename flagged in the result" do
       {scope, server, _dir} = seed()
-      assert {:ok, %{sensitive: true}} = Files.write_file(scope, server.id, "ops.json", "[]")
+      assert {:ok, %{sensitive: true}} = Servers.write_file(scope, server.id, "ops.json", "[]")
     end
 
     test "write onto an existing directory → {:error, :write_error}" do
       {scope, server, dir} = seed()
       File.mkdir_p!(Path.join(dir, "adir"))
-      assert {:error, :write_error} = Files.write_file(scope, server.id, "adir", "x")
+      assert {:error, :write_error} = Servers.write_file(scope, server.id, "adir", "x")
     end
   end
 
   describe "mkdir/3" do
     test "empty sanitized name → {:error, :name_required}" do
       {scope, server, _dir} = seed()
-      assert {:error, :name_required} = Files.mkdir(scope, server.id, "")
+      assert {:error, :name_required} = Servers.mkdir(scope, server.id, "")
     end
 
     test "creates nested dirs" do
       {scope, server, dir} = seed()
-      assert {:ok, %{path: "a/b/c"}} = Files.mkdir(scope, server.id, "a/b/c")
+      assert {:ok, %{path: "a/b/c"}} = Servers.mkdir(scope, server.id, "a/b/c")
       assert File.dir?(Path.join(dir, "a/b/c"))
     end
 
     test "already-existing path → {:error, :already_exists}" do
       {scope, server, dir} = seed()
       File.mkdir_p!(Path.join(dir, "world"))
-      assert {:error, :already_exists} = Files.mkdir(scope, server.id, "world")
+      assert {:error, :already_exists} = Servers.mkdir(scope, server.id, "world")
     end
   end
 
   describe "delete_path/3" do
     test "empty path → {:error, :cannot_delete_root}" do
       {scope, server, _dir} = seed()
-      assert {:error, :cannot_delete_root} = Files.delete_path(scope, server.id, "")
+      assert {:error, :cannot_delete_root} = Servers.delete_path(scope, server.id, "")
     end
 
     test "missing path → {:error, :path_not_found}" do
       {scope, server, _dir} = seed()
-      assert {:error, :path_not_found} = Files.delete_path(scope, server.id, "ghost")
+      assert {:error, :path_not_found} = Servers.delete_path(scope, server.id, "ghost")
     end
 
     test "deletes a file and reports type" do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "a.txt"), "x")
-      assert {:ok, %{path: "a.txt", type: "file"}} = Files.delete_path(scope, server.id, "a.txt")
+
+      assert {:ok, %{path: "a.txt", type: "file"}} =
+               Servers.delete_path(scope, server.id, "a.txt")
+
       refute File.exists?(Path.join(dir, "a.txt"))
     end
 
@@ -261,7 +264,7 @@ defmodule Allay.FilesTest do
       File.write!(Path.join(dir, "world/region/r.0.0.mca"), "region")
 
       assert {:ok, %{path: "world", type: "directory"}} =
-               Files.delete_path(scope, server.id, "world")
+               Servers.delete_path(scope, server.id, "world")
 
       refute File.exists?(Path.join(dir, "world"))
     end
@@ -270,14 +273,16 @@ defmodule Allay.FilesTest do
   describe "rename_path/4" do
     test "missing source → {:error, :source_not_found}" do
       {scope, server, _dir} = seed()
-      assert {:error, :source_not_found} = Files.rename_path(scope, server.id, "a.txt", "b.txt")
+      assert {:error, :source_not_found} = Servers.rename_path(scope, server.id, "a.txt", "b.txt")
     end
 
     test "destination already exists → {:error, :destination_exists}" do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "a.txt"), "a")
       File.write!(Path.join(dir, "b.txt"), "b")
-      assert {:error, :destination_exists} = Files.rename_path(scope, server.id, "a.txt", "b.txt")
+
+      assert {:error, :destination_exists} =
+               Servers.rename_path(scope, server.id, "a.txt", "b.txt")
     end
 
     test "renames in place returning sanitized rels" do
@@ -285,7 +290,7 @@ defmodule Allay.FilesTest do
       File.write!(Path.join(dir, "a.txt"), "a")
 
       assert {:ok, %{old_path: "a.txt", new_path: "b.txt"}} =
-               Files.rename_path(scope, server.id, "a.txt", "b.txt")
+               Servers.rename_path(scope, server.id, "a.txt", "b.txt")
 
       refute File.exists?(Path.join(dir, "a.txt"))
       assert File.read!(Path.join(dir, "b.txt")) == "a"
@@ -296,7 +301,7 @@ defmodule Allay.FilesTest do
       File.write!(Path.join(dir, "a.txt"), "a")
 
       assert {:ok, %{old_path: "a.txt", new_path: "nested/deep/b.txt"}} =
-               Files.rename_path(scope, server.id, "a.txt", "nested/deep/b.txt")
+               Servers.rename_path(scope, server.id, "a.txt", "nested/deep/b.txt")
 
       assert File.read!(Path.join(dir, "nested/deep/b.txt")) == "a"
     end
@@ -304,7 +309,7 @@ defmodule Allay.FilesTest do
     test "invalid old path → {:error, :invalid_old_path}" do
       {scope, server, _dir} = seed()
       bad = server_fixture(%{directory: "/nonexistent/#{System.unique_integer([:positive])}"})
-      assert {:error, :invalid_old_path} = Files.rename_path(scope, bad.id, "a", "b")
+      assert {:error, :invalid_old_path} = Servers.rename_path(scope, bad.id, "a", "b")
       _ = server
     end
   end
@@ -312,13 +317,13 @@ defmodule Allay.FilesTest do
   describe "download_path/3" do
     test "missing file → {:error, :file_not_found}" do
       {scope, server, _dir} = seed()
-      assert {:error, :file_not_found} = Files.download_path(scope, server.id, "nope.bin")
+      assert {:error, :file_not_found} = Servers.download_path(scope, server.id, "nope.bin")
     end
 
     test "directory → {:error, :is_directory_download}" do
       {scope, server, dir} = seed()
       File.mkdir_p!(Path.join(dir, "world"))
-      assert {:error, :is_directory_download} = Files.download_path(scope, server.id, "world")
+      assert {:error, :is_directory_download} = Servers.download_path(scope, server.id, "world")
     end
 
     test "returns full path and basename" do
@@ -326,7 +331,7 @@ defmodule Allay.FilesTest do
       File.mkdir_p!(Path.join(dir, "sub"))
       File.write!(Path.join(dir, "sub/file.bin"), "bytes")
 
-      assert {:ok, full, "file.bin"} = Files.download_path(scope, server.id, "sub/file.bin")
+      assert {:ok, full, "file.bin"} = Servers.download_path(scope, server.id, "sub/file.bin")
       assert full == Path.join(dir, "sub/file.bin")
     end
   end
@@ -345,7 +350,7 @@ defmodule Allay.FilesTest do
       u2 = tmp_upload("b.txt", "bb")
 
       assert {:ok, %{uploaded: uploaded, count: 2}} =
-               Files.save_uploads(scope, server.id, "incoming", [u1, u2])
+               Servers.save_uploads(scope, server.id, "incoming", [u1, u2])
 
       assert Enum.sort_by(uploaded, & &1.name) == [
                %{name: "a.txt", size: 3},
@@ -360,7 +365,7 @@ defmodule Allay.FilesTest do
       u = tmp_upload("../../evil.txt", "pwn")
 
       assert {:ok, %{uploaded: [%{name: "evil.txt"}], count: 1}} =
-               Files.save_uploads(scope, server.id, "drop", [u])
+               Servers.save_uploads(scope, server.id, "drop", [u])
 
       assert File.read!(Path.join(dir, "drop/evil.txt")) == "pwn"
       # Nothing escaped the sandbox root.
@@ -374,7 +379,7 @@ defmodule Allay.FilesTest do
       File.write!(Path.join(dir, "drop/a.txt"), "old")
       u = tmp_upload("a.txt", "new")
 
-      assert {:ok, %{count: 1}} = Files.save_uploads(scope, server.id, "drop", [u])
+      assert {:ok, %{count: 1}} = Servers.save_uploads(scope, server.id, "drop", [u])
       assert File.read!(Path.join(dir, "drop/a.txt")) == "new"
     end
 
@@ -382,7 +387,7 @@ defmodule Allay.FilesTest do
       {scope, server, dir} = seed()
       File.write!(Path.join(dir, "afile"), "x")
       u = tmp_upload("a.txt", "y")
-      assert {:error, :not_a_directory} = Files.save_uploads(scope, server.id, "afile", [u])
+      assert {:error, :not_a_directory} = Servers.save_uploads(scope, server.id, "afile", [u])
     end
 
     test "any copy failure → {:error, :upload_error}" do
@@ -393,7 +398,7 @@ defmodule Allay.FilesTest do
         path: Path.join(System.tmp_dir!(), "absent_#{System.unique_integer([:positive])}")
       }
 
-      assert {:error, :upload_error} = Files.save_uploads(scope, server.id, "drop", [missing])
+      assert {:error, :upload_error} = Servers.save_uploads(scope, server.id, "drop", [missing])
     end
   end
 end

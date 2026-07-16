@@ -1,7 +1,7 @@
-defmodule Allay.Imports.SessionTest do
+defmodule Allay.Servers.Import.SessionTest do
   use ExUnit.Case, async: false
 
-  alias Allay.Imports.Session
+  alias Allay.Servers.Import.Session
 
   defp data_dir do
     dir =

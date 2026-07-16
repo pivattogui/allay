@@ -1,7 +1,7 @@
-defmodule Allay.Imports.AnalyzerTest do
+defmodule Allay.Servers.Import.AnalyzerTest do
   use ExUnit.Case, async: true
 
-  alias Allay.Imports.Analyzer
+  alias Allay.Servers.Import.Analyzer
 
   # Builds a real .zip from a {name => content} map at a fresh temp path.
   defp zip_archive(files) do

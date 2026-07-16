@@ -1,16 +1,17 @@
-defmodule Allay.Files do
+defmodule Allay.Servers.Files do
   @moduledoc """
-  Filesystem operations for the server file browser/editor surface, ported from
-  legacy `routes/files.ts`. Every public function takes `%Allay.Accounts.Scope{}`
-  first (Phoenix 1.8 convention), loads the server row, and re-validates the
-  caller-supplied relative path through `Allay.Files.PathSandbox` against the
-  server's on-disk `directory`. The legacy error codes survive verbatim as typed
-  atoms; the controller maps them back to the exact HTTP codes/messages.
+  Internal filesystem operations for the server file browser/editor surface,
+  ported from legacy `routes/files.ts`. Every public function takes
+  `%Allay.Accounts.Scope{}` first, loads the server row, and re-validates the
+  caller-supplied relative path through `Allay.Servers.Files.PathSandbox`
+  against the server's on-disk `directory`. The legacy error codes survive
+  verbatim as typed atoms; the controller maps them back to the exact HTTP
+  codes/messages.
   """
 
   alias Allay.Accounts.Scope
-  alias Allay.Files.PathSandbox
   alias Allay.Servers
+  alias Allay.Servers.Files.PathSandbox
 
   # Files larger than this are never inlined into the editor response.
   @max_editable_size 1_048_576

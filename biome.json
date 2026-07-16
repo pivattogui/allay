@@ -68,6 +68,7 @@
       "!backend/deps",
       "!backend/_build",
       "!backend/priv/plts",
+      "!docs",
       "!data"
     ]
   }

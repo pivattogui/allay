@@ -1,4 +1,4 @@
-defmodule Allay.Imports.Session do
+defmodule Allay.Servers.Import.Session do
   @moduledoc """
   Temporary storage for an uploaded import archive.
 

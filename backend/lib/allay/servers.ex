@@ -1,7 +1,8 @@
 defmodule Allay.Servers do
   @moduledoc """
-  Context for Minecraft server management. All public functions take
-  `%Allay.Accounts.Scope{}` as the first argument (Phoenix 1.8 convention).
+  Context for Minecraft server management, including lifecycle, configuration,
+  sandboxed files, and archive imports. Public functions that operate on a
+  server take `%Allay.Accounts.Scope{}` as the first argument.
   """
 
   import Ecto.Query
@@ -13,6 +14,8 @@ defmodule Allay.Servers do
   alias Allay.Minecraft.Versions
   alias Allay.Repo
   alias Allay.Runtime
+  alias Allay.Servers.Files
+  alias Allay.Servers.Import
   alias Allay.Servers.JavaGate
   alias Allay.Servers.Provisioner
   alias Allay.Servers.RuntimeBridge
@@ -56,6 +59,66 @@ defmodule Allay.Servers do
   """
   def create_server(%Scope{} = scope, attrs, opts \\ []) do
     Provisioner.provision(scope, attrs, opts)
+  end
+
+  @doc "Lists entries in a directory within a server's sandboxed filesystem."
+  def list_entries(%Scope{} = scope, server_id, relative_path \\ "") do
+    Files.list_entries(scope, server_id, relative_path)
+  end
+
+  @doc "Reads a file within a server's sandboxed filesystem."
+  def read_file(%Scope{} = scope, server_id, relative_path, encoding) do
+    Files.read_file(scope, server_id, relative_path, encoding)
+  end
+
+  @doc "Writes a file within a server's sandboxed filesystem."
+  def write_file(%Scope{} = scope, server_id, relative_path, content) do
+    Files.write_file(scope, server_id, relative_path, content)
+  end
+
+  @doc "Creates a directory within a server's sandboxed filesystem."
+  def mkdir(%Scope{} = scope, server_id, relative_path) do
+    Files.mkdir(scope, server_id, relative_path)
+  end
+
+  @doc "Deletes a file or directory within a server's sandboxed filesystem."
+  def delete_path(%Scope{} = scope, server_id, relative_path) do
+    Files.delete_path(scope, server_id, relative_path)
+  end
+
+  @doc "Moves a file or directory within a server's sandboxed filesystem."
+  def rename_path(%Scope{} = scope, server_id, old_path, new_path) do
+    Files.rename_path(scope, server_id, old_path, new_path)
+  end
+
+  @doc "Resolves a sandboxed server file for download."
+  def download_path(%Scope{} = scope, server_id, relative_path) do
+    Files.download_path(scope, server_id, relative_path)
+  end
+
+  @doc "Stores uploaded files within a server's sandboxed filesystem."
+  def save_uploads(%Scope{} = scope, server_id, relative_path, uploads) do
+    Files.save_uploads(scope, server_id, relative_path, uploads)
+  end
+
+  @doc "Starts a staged archive import for a stopped server."
+  def begin_import(%Scope{} = scope, server_id, filename, opts \\ []) do
+    Import.begin(scope, server_id, filename, opts)
+  end
+
+  @doc "Analyzes a staged server archive."
+  def analyze_import(import_id, opts \\ []) do
+    Import.analyze(import_id, opts)
+  end
+
+  @doc "Discards a staged server archive."
+  def discard_import(import_id, opts \\ []) do
+    Import.discard(import_id, opts)
+  end
+
+  @doc "Imports selected archive contents into a stopped server."
+  def execute_import(%Scope{} = scope, server_id, import_id, selection, opts \\ []) do
+    Import.execute(scope, server_id, import_id, selection, opts)
   end
 
   @doc """

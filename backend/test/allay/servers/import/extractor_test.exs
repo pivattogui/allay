@@ -1,7 +1,7 @@
-defmodule Allay.Imports.ExtractorTest do
+defmodule Allay.Servers.Import.ExtractorTest do
   use ExUnit.Case, async: true
 
-  alias Allay.Imports.Extractor
+  alias Allay.Servers.Import.Extractor
 
   @categories %{
     world: ["world/", "world_nether/"],
