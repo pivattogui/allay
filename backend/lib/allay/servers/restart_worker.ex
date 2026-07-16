@@ -24,6 +24,7 @@ defmodule Allay.Servers.RestartWorker do
   alias Allay.Accounts.Scope
   alias Allay.Runtime
   alias Allay.Servers
+  alias Allay.Servers.OperationLock
 
   @default_deadline_ms 45_000
   @poll_interval_ms 100
@@ -31,6 +32,10 @@ defmodule Allay.Servers.RestartWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"server_id" => server_id}}) do
+    OperationLock.run(server_id, :lifecycle, fn -> perform_locked(server_id) end)
+  end
+
+  defp perform_locked(server_id) do
     scope = Scope.system()
 
     case Servers.get_server(scope, server_id) do

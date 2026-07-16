@@ -5,6 +5,7 @@ defmodule AllayWeb.ServerFileControllerTest do
   import Allay.ServersFixtures
 
   alias Allay.Accounts
+  alias Allay.Servers.OperationLock
 
   setup %{conn: conn} do
     user = user_fixture()
@@ -50,6 +51,23 @@ defmodule AllayWeb.ServerFileControllerTest do
       for resp <- paths do
         assert resp.status == 401, "expected 401, got #{resp.status}"
       end
+    end
+  end
+
+  describe "operation conflicts" do
+    test "409 exposes the active operation for a conflicting write", %{conn: conn, tmp: tmp} do
+      server = seeded_server(tmp)
+      owner = hold_operation(server.id, :restore)
+
+      conn =
+        put(conn, "/api/servers/#{server.id}/files/write/config.txt", %{"content" => "value"})
+
+      assert %{
+               "code" => "SERVER_OPERATION_IN_PROGRESS",
+               "details" => %{"operation" => "restore"}
+             } = json_response(conn, 409)
+
+      release_operation(owner)
     end
   end
 
@@ -521,5 +539,29 @@ defmodule AllayWeb.ServerFileControllerTest do
       conn = delete(conn, "/api/servers/#{Ecto.UUID.generate()}/files/foo.txt")
       assert %{"code" => "SERVER_NOT_FOUND"} = json_response(conn, 404)
     end
+  end
+
+  defp hold_operation(server_id, operation) do
+    test_pid = self()
+
+    task =
+      Task.async(fn ->
+        OperationLock.run(server_id, operation, fn ->
+          send(test_pid, {:operation_acquired, self()})
+
+          receive do
+            :release_operation -> :released
+          end
+        end)
+      end)
+
+    assert_receive {:operation_acquired, owner_pid}
+    on_exit(fn -> Process.exit(task.pid, :kill) end)
+    %{task: task, owner_pid: owner_pid}
+  end
+
+  defp release_operation(%{task: task, owner_pid: owner_pid}) do
+    send(owner_pid, :release_operation)
+    assert :released = Task.await(task)
   end
 end

@@ -15,8 +15,10 @@ defmodule Allay.Servers do
   alias Allay.Repo
   alias Allay.Runtime
   alias Allay.Servers.Files
+  alias Allay.Servers.Icon
   alias Allay.Servers.Import
   alias Allay.Servers.JavaGate
+  alias Allay.Servers.OperationLock
   alias Allay.Servers.Provisioner
   alias Allay.Servers.RuntimeBridge
   alias Allay.Servers.Server
@@ -130,6 +132,10 @@ defmodule Allay.Servers do
   a duplicate port, or `{:error, changeset}` for validation failures.
   """
   def update_server(%Scope{} = scope, id, attrs) do
+    OperationLock.run(id, :configuration, fn -> update_server_locked(scope, id, attrs) end)
+  end
+
+  defp update_server_locked(scope, id, attrs) do
     with {:ok, server} <- get_server(scope, id),
          changeset = server |> Server.update_changeset(attrs) |> put_rcon_port_change(),
          {:ok, updated} <- persist(changeset) do
@@ -165,10 +171,24 @@ defmodule Allay.Servers do
   end
 
   @doc """
-  Persists the server's `icon_path` column. Pass `nil` to clear it. The
-  on-disk icon file is managed by the caller (controller). Returns `:ok`.
+  Persists the server's `icon_path` column inside the server operation lock.
+  Pass `nil` to clear it. Icon use cases manage the on-disk file. Returns `:ok`.
   """
   def set_icon_path(%Scope{} = scope, id, icon_path) do
+    OperationLock.run(id, :file_write, fn -> set_icon_path_locked(scope, id, icon_path) end)
+  end
+
+  @doc "Processes and stores a server icon inside the server operation lock."
+  def store_icon(%Scope{} = scope, id, image_bytes) when is_binary(image_bytes) do
+    Icon.store(scope, id, image_bytes)
+  end
+
+  @doc "Removes a server icon inside the server operation lock."
+  def delete_icon(%Scope{} = scope, id) do
+    Icon.delete(scope, id)
+  end
+
+  defp set_icon_path_locked(scope, id, icon_path) do
     with {:ok, server} <- get_server(scope, id) do
       server
       |> Ecto.Changeset.change(icon_path: icon_path)
@@ -205,6 +225,12 @@ defmodule Allay.Servers do
   Returns `{:ok, %{needs_restart: bool, port_conflict: bool}}`.
   """
   def put_properties(%Scope{} = scope, id, props) when is_map(props) do
+    OperationLock.run(id, :configuration, fn ->
+      put_properties_locked(scope, id, props)
+    end)
+  end
+
+  defp put_properties_locked(scope, id, props) do
     with {:ok, server} <- get_server(scope, id) do
       needs_restart = Runtime.status(id).state == :running
       File.write!(properties_path(server), Properties.serialize(props))
@@ -234,6 +260,12 @@ defmodule Allay.Servers do
   Returns `{:ok, %{needs_restart: bool, port_conflict: bool}}`.
   """
   def put_properties_raw(%Scope{} = scope, id, content) when is_binary(content) do
+    OperationLock.run(id, :configuration, fn ->
+      put_properties_raw_locked(scope, id, content)
+    end)
+  end
+
+  defp put_properties_raw_locked(scope, id, content) do
     with {:ok, server} <- get_server(scope, id) do
       needs_restart = Runtime.status(id).state == :running
       File.write!(properties_path(server), content)
@@ -346,6 +378,10 @@ defmodule Allay.Servers do
   Returns `{:ok, status_map}` once the instance is started.
   """
   def start_server(%Scope{} = scope, id, opts \\ []) do
+    OperationLock.run(id, :lifecycle, fn -> start_server_locked(scope, id, opts) end)
+  end
+
+  defp start_server_locked(scope, id, opts) do
     with {:ok, server} <- get_server(scope, id),
          {:ok, spec} <- RuntimeBridge.build_spec(server, opts),
          {:ok, _pid} <- Runtime.start_server(spec, opts[:env] || []) do
@@ -364,6 +400,10 @@ defmodule Allay.Servers do
   controller maps it to the stop route.
   """
   def stop_server_process(%Scope{} = scope, id) do
+    OperationLock.run(id, :lifecycle, fn -> stop_server_process_locked(scope, id) end)
+  end
+
+  defp stop_server_process_locked(scope, id) do
     with {:ok, _server} <- get_server(scope, id) do
       if Runtime.status(id).state in @unstoppable_states do
         {:error, :not_running}
@@ -380,6 +420,10 @@ defmodule Allay.Servers do
   `{:ok, status_map}`.
   """
   def kill_server(%Scope{} = scope, id) do
+    OperationLock.run(id, :lifecycle, fn -> kill_server_locked(scope, id) end)
+  end
+
+  defp kill_server_locked(scope, id) do
     with {:ok, _server} <- get_server(scope, id) do
       case Runtime.kill_server(id) do
         :ok -> {:ok, Runtime.status(id)}
@@ -438,6 +482,10 @@ defmodule Allay.Servers do
   Returns `:ok`.
   """
   def delete_server(%Scope{} = scope, id) do
+    OperationLock.run(id, :delete, fn -> delete_server_locked(scope, id) end)
+  end
+
+  defp delete_server_locked(scope, id) do
     with {:ok, server} <- get_server(scope, id) do
       if Runtime.status(id).state in @active_states do
         Runtime.stop_server(id)
@@ -468,6 +516,12 @@ defmodule Allay.Servers do
   {:backup_failed, _}}`, or `{:error, {:jar_download_failed, message}}`.
   """
   def migrate_server(%Scope{} = scope, id, type, version, opts \\ []) do
+    OperationLock.run(id, :migration, fn ->
+      migrate_server_locked(scope, id, type, version, opts)
+    end)
+  end
+
+  defp migrate_server_locked(scope, id, type, version, opts) do
     runtime = Keyword.get(opts, :runtime, Runtime)
 
     with :ok <- validate_migration_type(type),

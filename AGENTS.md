@@ -63,6 +63,8 @@ Vite proxies `/api` and `/socket` to Phoenix on port 4000.
 
 The runtime receives a resolved `%Allay.Runtime.Spec{}` and must not read from Ecto directly. Server file and import use cases enter through `Allay.Servers`; their implementation modules remain behind that public context boundary.
 
+Mutating operations for the same server are serialized by `Allay.Servers.OperationLock`, a node-local, fail-fast, reentrant lock backed by a unique OTP Registry. Operations for different servers remain concurrent.
+
 ## Runtime model
 
 `Allay.Runtime.Supervisor` owns a unique Registry and a DynamicSupervisor. Each active Minecraft server has an `InstanceSupervisor` containing:

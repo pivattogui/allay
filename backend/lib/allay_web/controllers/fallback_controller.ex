@@ -77,6 +77,16 @@ defmodule AllayWeb.FallbackController do
     error(conn, :conflict, "Server is not running", "SERVER_NOT_RUNNING")
   end
 
+  def call(conn, {:error, {:operation_in_progress, operation}}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{
+      error: "Another operation is already in progress for this server",
+      code: "SERVER_OPERATION_IN_PROGRESS",
+      details: %{operation: to_string(operation)}
+    })
+  end
+
   def call(conn, {:error, :invalid_command}) do
     error(conn, :bad_request, "Command is required", "INVALID_COMMAND")
   end

@@ -12,6 +12,7 @@ defmodule Allay.Servers.Files do
   alias Allay.Accounts.Scope
   alias Allay.Servers
   alias Allay.Servers.Files.PathSandbox
+  alias Allay.Servers.OperationLock
 
   # Files larger than this are never inlined into the editor response.
   @max_editable_size 1_048_576
@@ -51,6 +52,12 @@ defmodule Allay.Servers.Files do
   Returns `{:ok, %{path, size, sensitive}}` or `{:error, :write_error}`.
   """
   def write_file(%Scope{} = scope, server_id, rel, content) do
+    OperationLock.run(server_id, :file_write, fn ->
+      write_file_locked(scope, server_id, rel, content)
+    end)
+  end
+
+  defp write_file_locked(scope, server_id, rel, content) do
     with {:ok, full, sanitized} <- resolve(scope, server_id, rel) do
       with :ok <- File.mkdir_p(Path.dirname(full)),
            :ok <- File.write(full, content) do
@@ -70,6 +77,12 @@ defmodule Allay.Servers.Files do
   Creates the directory `rel` (recursive). Empty sanitized name is rejected.
   """
   def mkdir(%Scope{} = scope, server_id, rel) do
+    OperationLock.run(server_id, :file_write, fn ->
+      mkdir_locked(scope, server_id, rel)
+    end)
+  end
+
+  defp mkdir_locked(scope, server_id, rel) do
     with {:ok, full, sanitized} <- resolve(scope, server_id, rel) do
       cond do
         sanitized == "" -> {:error, :name_required}
@@ -84,6 +97,12 @@ defmodule Allay.Servers.Files do
   entry type before removal for the response.
   """
   def delete_path(%Scope{} = scope, server_id, rel) do
+    OperationLock.run(server_id, :file_write, fn ->
+      delete_path_locked(scope, server_id, rel)
+    end)
+  end
+
+  defp delete_path_locked(scope, server_id, rel) do
     with {:ok, full, sanitized} <- resolve(scope, server_id, rel) do
       cond do
         sanitized == "" -> {:error, :cannot_delete_root}
@@ -98,6 +117,12 @@ defmodule Allay.Servers.Files do
   destination parents are created so this doubles as a move.
   """
   def rename_path(%Scope{} = scope, server_id, old_rel, new_rel) do
+    OperationLock.run(server_id, :file_write, fn ->
+      rename_path_locked(scope, server_id, old_rel, new_rel)
+    end)
+  end
+
+  defp rename_path_locked(scope, server_id, old_rel, new_rel) do
     with {:ok, server} <- Servers.get_server(scope, server_id),
          {:ok, old_full, old_san} <- resolve_old(server.directory, old_rel),
          {:ok, new_full, new_san} <- resolve_new(server.directory, new_rel) do
@@ -129,6 +154,12 @@ defmodule Allay.Servers.Files do
   copy failure aborts the whole batch with `{:error, :upload_error}`.
   """
   def save_uploads(%Scope{} = scope, server_id, rel_dir, uploads) do
+    OperationLock.run(server_id, :file_write, fn ->
+      save_uploads_locked(scope, server_id, rel_dir, uploads)
+    end)
+  end
+
+  defp save_uploads_locked(scope, server_id, rel_dir, uploads) do
     with {:ok, target, _sanitized} <- resolve(scope, server_id, rel_dir),
          :ok <- ensure_target_dir(target) do
       copy_uploads(target, uploads)

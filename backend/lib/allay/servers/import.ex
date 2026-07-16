@@ -36,6 +36,7 @@ defmodule Allay.Servers.Import do
   alias Allay.Servers.Import.Analyzer
   alias Allay.Servers.Import.Extractor
   alias Allay.Servers.Import.Session
+  alias Allay.Servers.OperationLock
 
   @doc false
   def begin(%Scope{} = scope, server_id, filename, opts \\ []) do
@@ -70,6 +71,12 @@ defmodule Allay.Servers.Import do
   `{:error, {:backup_failed, output}}`, `{:error, {:import_failed, reason}}`.
   """
   def execute(%Scope{} = scope, server_id, import_id, selection, opts \\ []) do
+    OperationLock.run(server_id, :import, fn ->
+      execute_locked(scope, server_id, import_id, selection, opts)
+    end)
+  end
+
+  defp execute_locked(scope, server_id, import_id, selection, opts) do
     runtime = Keyword.get(opts, :runtime, Runtime)
 
     with {:ok, server} <- Servers.get_server(scope, server_id),

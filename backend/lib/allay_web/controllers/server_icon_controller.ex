@@ -11,12 +11,11 @@ defmodule AllayWeb.ServerIconController do
   def create(conn, %{"id" => id} = params) do
     scope = conn.assigns.current_scope
 
-    with {:ok, server} <- fetch_server(scope, id),
+    with {:ok, _server} <- fetch_server(scope, id),
          {:ok, upload} <- fetch_upload(params),
          :ok <- validate_image_type(upload),
          {:ok, bytes} <- read_within_limit(upload),
-         {:ok, _path} <- process_icon(server, bytes),
-         :ok <- Servers.set_icon_path(scope, id, @icon_filename) do
+         {:ok, _path} <- icon(Servers.store_icon(scope, id, bytes)) do
       json(conn, %{iconPath: @icon_filename})
     end
   end
@@ -37,13 +36,9 @@ defmodule AllayWeb.ServerIconController do
   def delete(conn, %{"id" => id}) do
     scope = conn.assigns.current_scope
 
-    with {:ok, server} <- fetch_server(scope, id) do
-      File.rm(icon_path(server))
-
-      case Servers.set_icon_path(scope, id, nil) do
-        :ok -> json(conn, %{message: "Icon deleted successfully"})
-        {:error, _} = error -> error
-      end
+    with {:ok, _server} <- fetch_server(scope, id),
+         :ok <- icon(Servers.delete_icon(scope, id)) do
+      json(conn, %{message: "Icon deleted successfully"})
     end
   end
 
@@ -61,23 +56,10 @@ defmodule AllayWeb.ServerIconController do
     end
   end
 
-  defp process_icon(server, bytes) do
-    path = icon_path(server)
-
-    try do
-      {:ok, image} = Image.from_binary(bytes)
-
-      image
-      |> Image.thumbnail!("64x64", crop: :center)
-      |> Image.write!(path)
-
-      {:ok, path}
-    rescue
-      _ -> {:error, :image_processing_failed}
-    end
-  end
-
   defp icon_path(server), do: Path.join(server.directory, @icon_filename)
+
+  defp icon({:error, :not_found}), do: {:error, :server_not_found}
+  defp icon(other), do: other
 
   defp fetch_server(scope, id) do
     case Servers.get_server(scope, id) do

@@ -23,6 +23,7 @@ defmodule Allay.Backups do
   alias Allay.Repo
   alias Allay.Runtime
   alias Allay.Servers
+  alias Allay.Servers.OperationLock
 
   @default_save_wait_ms 3_000
   @default_max_backups 10
@@ -42,6 +43,12 @@ defmodule Allay.Backups do
   `{:error, {:backup_failed, output}}` when tar fails.
   """
   def create_backup(%Scope{} = scope, server_id, type \\ "manual", opts \\ []) do
+    OperationLock.run(server_id, :backup, fn ->
+      create_backup_locked(scope, server_id, type, opts)
+    end)
+  end
+
+  defp create_backup_locked(scope, server_id, type, opts) do
     with {:ok, server} <- Servers.get_server(scope, server_id) do
       runtime = Keyword.get(opts, :runtime, Runtime)
       running? = runtime.status(server_id).state == :running
@@ -170,6 +177,12 @@ defmodule Allay.Backups do
   `{:error, :backup_file_not_found}`, `{:error, {:restore_failed, reason}}`.
   """
   def restore_backup(%Scope{} = scope, server_id, backup_id, opts \\ []) do
+    OperationLock.run(server_id, :restore, fn ->
+      restore_backup_locked(scope, server_id, backup_id, opts)
+    end)
+  end
+
+  defp restore_backup_locked(scope, server_id, backup_id, opts) do
     runtime = Keyword.get(opts, :runtime, Runtime)
 
     with {:ok, backup} <- get_backup(scope, server_id, backup_id),
@@ -186,6 +199,12 @@ defmodule Allay.Backups do
   state guard (legacy parity). Returns `:ok` or `{:error, :backup_not_found}`.
   """
   def delete_backup(%Scope{} = scope, server_id, backup_id, opts \\ []) do
+    OperationLock.run(server_id, :backup, fn ->
+      delete_backup_locked(scope, server_id, backup_id, opts)
+    end)
+  end
+
+  defp delete_backup_locked(scope, server_id, backup_id, opts) do
     with {:ok, backup} <- get_backup(scope, server_id, backup_id) do
       File.rm(archive_path(backup, opts))
       {:ok, _} = Repo.delete(backup)

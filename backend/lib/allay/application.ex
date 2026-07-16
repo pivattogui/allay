@@ -10,6 +10,7 @@ defmodule Allay.Application do
     children = [
       AllayWeb.Telemetry,
       Allay.Repo,
+      {Registry, keys: :unique, name: Allay.Servers.OperationRegistry},
       {Oban, Application.fetch_env!(:allay, Oban)},
       {DNSCluster, query: Application.get_env(:allay, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Allay.PubSub},
