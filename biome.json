@@ -55,6 +55,20 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/dist", "!**/coverage", "!**/*.min.js", "!**/drizzle", "!data"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/coverage",
+      "!**/*.min.js",
+      "!**/drizzle",
+      "!**/.claude",
+      "!**/.codex",
+      "!**/.serena",
+      "!backend/deps",
+      "!backend/_build",
+      "!backend/priv/plts",
+      "!data"
+    ]
   }
 }

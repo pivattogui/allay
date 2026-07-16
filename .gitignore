@@ -3,6 +3,8 @@ node_modules/
 
 # Build
 dist/
+*.tsbuildinfo
+frontend/vite.config.js
 
 # Environment
 .env

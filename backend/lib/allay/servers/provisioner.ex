@@ -18,8 +18,6 @@ defmodule Allay.Servers.Provisioner do
   alias Allay.Servers.JavaGate
   alias Allay.Servers.Server
 
-  alias Ecto.Multi
-
   @rcon_port_offset 10_000
 
   @doc """
@@ -99,24 +97,40 @@ defmodule Allay.Servers.Provisioner do
       |> Ecto.Changeset.put_change(:rcon_port, rcon_port)
       |> Ecto.Changeset.put_change(:rcon_password, rcon_password)
 
-    multi =
-      Multi.new()
-      |> Multi.insert(:server, server_changeset)
-      |> Multi.insert(:backup_config, fn %{server: server} ->
-        backup_config_changeset(server.id)
-      end)
+    transaction = fn ->
+      with {:ok, server} <- insert_server(server_changeset),
+           {:ok, _config} <- insert_backup_config(server.id) do
+        server
+      else
+        {:error, step, reason} -> Repo.rollback({step, reason})
+      end
+    end
 
-    case Repo.transaction(multi) do
-      {:ok, %{server: server}} ->
+    case Repo.transaction(transaction) do
+      {:ok, server} ->
         {:ok, server}
 
-      {:error, :server, changeset, _changes} ->
+      {:error, {:server, changeset}} ->
         File.rm_rf(directory)
         remap_port_constraint(changeset)
 
-      {:error, _step, reason, _changes} ->
+      {:error, {_step, reason}} ->
         File.rm_rf(directory)
         {:error, {:provision_failed, inspect(reason)}}
+    end
+  end
+
+  defp insert_server(changeset) do
+    case Repo.insert(changeset) do
+      {:ok, server} -> {:ok, server}
+      {:error, reason} -> {:error, :server, reason}
+    end
+  end
+
+  defp insert_backup_config(server_id) do
+    case server_id |> backup_config_changeset() |> Repo.insert() do
+      {:ok, config} -> {:ok, config}
+      {:error, reason} -> {:error, :backup_config, reason}
     end
   end
 
