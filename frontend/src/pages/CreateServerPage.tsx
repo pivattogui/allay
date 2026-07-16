@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { useCreateServer } from '@/hooks/useServerActions'
+import { fetchSystemInfo, fetchSystemServerTypes, fetchSystemVersions } from '@/lib/api'
 
 interface ServerType {
   id: string
@@ -43,16 +44,10 @@ export function CreateServerPage() {
   useEffect(() => {
     const loadPortRange = async () => {
       try {
-        const token = localStorage.getItem('token')
-        const res = await fetch('/api/system/info', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.portRange) {
-            setPortRange(data.portRange)
-            setPort(String(data.portRange.min))
-          }
+        const data = await fetchSystemInfo()
+        if (data.portRange) {
+          setPortRange(data.portRange)
+          setPort(String(data.portRange.min))
         }
       } catch (_err) {}
     }
@@ -63,16 +58,10 @@ export function CreateServerPage() {
   useEffect(() => {
     const fetchTypes = async () => {
       try {
-        const token = localStorage.getItem('token')
-        const res = await fetch('/api/system/server-types', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setServerTypes(data.types || [])
-          if (data.types?.length > 0) {
-            setType(data.types[0].id)
-          }
+        const types = await fetchSystemServerTypes()
+        setServerTypes(types || [])
+        if (types?.length > 0) {
+          setType(types[0].id)
         }
       } catch (_err) {
       } finally {
@@ -91,16 +80,10 @@ export function CreateServerPage() {
       setLoadingVersions(true)
       setVersion('')
       try {
-        const token = localStorage.getItem('token')
-        const res = await fetch(`/api/system/versions/${type}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setAvailableVersions(data.versions || [])
-          if (data.versions?.length > 0) {
-            setVersion(data.versions[0])
-          }
+        const versions = await fetchSystemVersions(type)
+        setAvailableVersions(versions || [])
+        if (versions?.length > 0) {
+          setVersion(versions[0])
         }
       } catch (_err) {
         setAvailableVersions([])

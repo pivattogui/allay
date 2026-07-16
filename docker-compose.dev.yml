@@ -1,13 +1,10 @@
 # Allay - Development Compose
 #
-# Usage:
-#   docker compose -f docker-compose.dev.yml up -d              # postgres + backend
-#   docker compose -f docker-compose.dev.yml up -d postgres     # database only
-#   docker compose -f docker-compose.dev.yml logs -f backend    # follow backend logs
-#   docker compose -f docker-compose.dev.yml down               # stop all
-#
-# Frontend runs natively for fast HMR:
-#   cd frontend && pnpm dev
+# Only Postgres runs in Docker for dev. The backend and frontend run natively:
+#   docker compose -f docker-compose.dev.yml up -d        # start postgres
+#   cd backend && mix phx.server                       # Phoenix on :4000
+#   cd frontend && pnpm dev                               # Vite on :5173 (proxies to :4000)
+#   docker compose -f docker-compose.dev.yml down         # stop postgres
 
 services:
   postgres:
@@ -26,34 +23,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-      target: backend-builder
-    restart: unless-stopped
-    command: ["bun", "run", "--watch", "src/index.ts"]
-    working_dir: /app
-    ports:
-      - "${BACKEND_PORT:-3000}:3000"
-      - "${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}:${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}"
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DATABASE_URL: postgresql://${DB_USER:-allay}:${DB_PASSWORD:-allay}@postgres:5432/${DB_NAME:-allay}
-      JWT_SECRET: ${JWT_SECRET:-development-secret-change-in-production}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
-      DATA_DIR: /app/data
-      MC_PORT_MIN: ${MC_PORT_MIN:-25565}
-      MC_PORT_MAX: ${MC_PORT_MAX:-25575}
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-      - ./data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
 
 volumes:
   pgdata-dev:

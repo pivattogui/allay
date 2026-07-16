@@ -4,7 +4,7 @@
 #   curl -O https://raw.githubusercontent.com/pivattogui/allay/main/docker-compose.yml
 #   curl -O https://raw.githubusercontent.com/pivattogui/allay/main/.env.example
 #   mv .env.example .env
-#   # Edit .env: set JWT_SECRET and DB_PASSWORD
+#   # Edit .env: set SECRET_KEY_BASE (mix phx.gen.secret) and DB_PASSWORD
 #   docker compose up -d
 #
 # Open http://localhost:8080 (or whatever ALLAY_PORT is) and create your admin.
@@ -30,17 +30,16 @@ services:
     image: ghcr.io/pivattogui/allay:${ALLAY_VERSION:-latest}
     restart: unless-stopped
     ports:
-      - "${ALLAY_PORT:-8080}:3000"
+      - "${ALLAY_PORT:-8080}:4000"
       - "${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}:${MC_PORT_MIN:-25565}-${MC_PORT_MAX:-25575}"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${DB_USER:-allay}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-allay}}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (min 16 chars)}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      DATABASE_URL: ${DATABASE_URL:-ecto://${DB_USER:-allay}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-allay}}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required (mix phx.gen.secret)}
+      PHX_SERVER: "true"
       ALLAY_PUBLIC_ORIGIN: ${ALLAY_PUBLIC_ORIGIN:-}
       MC_PORT_MIN: ${MC_PORT_MIN:-25565}
       MC_PORT_MAX: ${MC_PORT_MAX:-25575}
       DATA_DIR: /app/data
-      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - ./data/allay:/app/data
     depends_on:

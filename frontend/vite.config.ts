@@ -14,12 +14,12 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:3000',
+        target: process.env.VITE_API_URL || 'http://localhost:4000',
         changeOrigin: true,
         timeout: 600000,
       },
-      '/ws': {
-        target: process.env.VITE_API_URL || 'http://localhost:3000',
+      '/socket': {
+        target: process.env.VITE_API_URL || 'http://localhost:4000',
         ws: true,
       },
     },

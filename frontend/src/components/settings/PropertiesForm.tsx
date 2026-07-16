@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { fetchProperties as fetchPropertiesApi, updateProperties } from '@/lib/api'
 
 interface PropertiesFormProps {
   serverId: string
@@ -43,16 +44,10 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
   const fetchProperties = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/servers/${serverId}/properties`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setProperties(data.properties || {})
-        setOriginalProperties(data.properties || {})
-        setHasChanges(false)
-      }
+      const props = await fetchPropertiesApi(serverId)
+      setProperties(props || {})
+      setOriginalProperties(props || {})
+      setHasChanges(false)
     } catch (_err) {
       toast.error('Failed to load server properties')
     } finally {
@@ -76,25 +71,12 @@ export function PropertiesForm({ serverId, serverName: _serverName }: Properties
   const handleSave = async () => {
     setSaving(true)
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/servers/${serverId}/properties`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ properties }),
-      })
-      if (res.ok) {
-        toast.success('Properties saved successfully')
-        setOriginalProperties(properties)
-        setHasChanges(false)
-      } else {
-        const data = await res.json()
-        toast.error(data.error || 'Failed to save properties')
-      }
-    } catch (_err) {
-      toast.error('Failed to save properties')
+      await updateProperties(serverId, properties)
+      toast.success('Properties saved successfully')
+      setOriginalProperties(properties)
+      setHasChanges(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save properties')
     } finally {
       setSaving(false)
     }

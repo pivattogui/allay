@@ -6,29 +6,34 @@ RUN corepack enable
 WORKDIR /workspace
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY frontend/package.json ./frontend/
-COPY backend/package.json ./backend/
 RUN pnpm install --frozen-lockfile --filter allay-frontend...
 COPY frontend ./frontend
 RUN pnpm --filter allay-frontend build
 # Output: /workspace/frontend/dist
 
-# ---- backend-builder ----
-FROM oven/bun:1 AS backend-builder
+# ---- elixir-builder ----
+FROM hexpm/elixir:1.18.4-erlang-27.3.4-debian-bookworm-20250428-slim AS elixir-builder
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY backend/package.json backend/bun.lock ./
-RUN bun install --frozen-lockfile
-COPY backend ./
-RUN bun build src/index.ts src/db/migrate.ts --target bun --outdir dist --minify
-# Output: /app/dist/{index.js,migrate.js}
+ENV MIX_ENV=prod
+RUN mix local.hex --force && mix local.rebar --force
+COPY backend/mix.exs backend/mix.lock ./
+RUN mix deps.get --only prod
+RUN mix deps.compile
+COPY backend/config ./config
+COPY backend/lib ./lib
+COPY backend/priv ./priv
+COPY --from=frontend-builder /workspace/frontend/dist ./priv/static
+RUN mix compile
+RUN mix release
+# Output: /app/_build/prod/rel/allay
 
 # ---- runtime ----
-FROM oven/bun:1 AS runtime
-
-# Temurin 21 + 25 JREs for Minecraft (21 for ≤1.21.x, 25 for ≥26.x)
-# ProcessManager picks the right runtime per server based on the Mojang manifest's javaVersion.majorVersion.
+FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      wget apt-transport-https gnupg curl unzip ca-certificates \
+      wget apt-transport-https gnupg curl ca-certificates libstdc++6 libncurses6 locales tar \
  && wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public \
       | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
  && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" \
@@ -36,28 +41,16 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends temurin-21-jre temurin-25-jre \
  && rm -rf /var/lib/apt/lists/*
-
-# Use the non-root user already provided by the base image
+# UTF-8 locale for the BEAM
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 WORKDIR /app
-
-COPY backend/package.json backend/bun.lock ./
-RUN bun install --production --frozen-lockfile
-
-COPY --from=backend-builder /app/dist ./dist
-COPY --from=backend-builder /app/drizzle ./drizzle
-COPY --from=frontend-builder /workspace/frontend/dist ./public
-
-RUN mkdir -p /app/data && chown -R bun:bun /app
-USER bun
-
-ENV DATA_DIR=/app/data
-ENV NODE_ENV=production
-ENV PORT=3000
-
-EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -fsS http://localhost:3000/health || exit 1
-
-# Apply migrations on startup, then run the server
-CMD ["sh", "-c", "bun run dist/db/migrate.js && bun run dist/index.js"]
+COPY --from=elixir-builder /app/_build/prod/rel/allay ./
+RUN useradd -r -u 1000 allay && mkdir -p /app/data && chown -R allay:allay /app
+USER allay
+ENV DATA_DIR=/app/data PHX_SERVER=true PORT=4000
+EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://localhost:4000/health || exit 1
+# migrate on boot then start
+ENTRYPOINT ["/bin/sh", "-c", "bin/allay eval 'Allay.Release.migrate()' && exec bin/allay start"]
