@@ -43,6 +43,7 @@ config :allay, :boot_autostart, false
 
 # Keep runtime discovery deterministic. Individual tests provide fake JDK roots.
 config :allay, :java_auto_discovery, false
+config :allay, :java_scan_dirs, []
 
 # Oban manual testing mode disables queue draining and plugins so tests
 # control job execution explicitly via Oban.Testing helpers.
