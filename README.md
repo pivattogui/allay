@@ -76,6 +76,8 @@ VITE_BACKEND_URL=https://api.allay.example pnpm build
 
 Publish `frontend/dist/` using a static host. `VITE_BACKEND_URL` is embedded at build time, so a different backend URL requires a new frontend build.
 
+Alternatively, use the published `ghcr.io/pivattogui/allay-frontend` image. It uses the browser origin for backend requests, so the reverse proxy must route `/api` and `/socket` to the backend while routing other paths to the frontend container.
+
 ## Configuration ownership
 
 Backend variables belong in `backend/.env` for native development or in the backend runtime environment:

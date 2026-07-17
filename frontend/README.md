@@ -28,6 +28,8 @@ VITE_BACKEND_URL=https://api.allay.example pnpm build
 
 The deployable static artifact is written to `dist/`. The backend URL is embedded at build time.
 
+The published `ghcr.io/pivattogui/allay-frontend` image leaves `VITE_BACKEND_URL` empty and uses the browser origin. A reverse proxy must route `/api` and `/socket` to the backend while routing other paths to the frontend container.
+
 ## Scripts
 
 | Command | Purpose |
