@@ -31,10 +31,13 @@ coverage/
 # Temp
 tmp/
 *.tmp
+.pnpm-store
 
 # Server data
 data/
 
+.codex
+.serena
 .omc
 .claude
 CLAUDE.md

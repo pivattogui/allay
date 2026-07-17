@@ -46,6 +46,10 @@ end
 if config_env() == :dev do
   import Dotenvy
 
+  config :allay, :cors_allowed_origins, [
+    env!("FRONTEND_ORIGIN", :string, "http://localhost:5173")
+  ]
+
   config :allay, Allay.Repo,
     url: env!("DATABASE_URL", :string, "ecto://allay:allay@localhost:5432/allay_dev"),
     pool_size: env!("POOL_SIZE", :integer, 10),
@@ -72,13 +76,14 @@ if config_env() == :prod do
     pool_size: env!("POOL_SIZE", :integer, 10),
     socket_options: maybe_ipv6
 
-  # HTTP-only homelab: derive host + WebSocket origin check from
-  # ALLAY_PUBLIC_ORIGIN. Unset → localhost with check_origin disabled
-  # (same-origin only).
-  {host, check_origin} =
-    AllayWeb.EndpointConfig.origin(env!("ALLAY_PUBLIC_ORIGIN", :string, nil))
+  host =
+    env!("ALLAY_PUBLIC_ORIGIN", :string, nil)
+    |> AllayWeb.EndpointConfig.backend_host()
+
+  frontend_origin = env!("FRONTEND_ORIGIN", :string!)
 
   config :allay, :dns_cluster_query, env!("DNS_CLUSTER_QUERY", :string, nil)
+  config :allay, :cors_allowed_origins, [frontend_origin]
 
   config :allay, AllayWeb.Endpoint,
     url: [host: host],
@@ -87,6 +92,6 @@ if config_env() == :prod do
       ip: {0, 0, 0, 0},
       port: env!("PORT", :integer, 4000)
     ],
-    check_origin: check_origin,
+    check_origin: [frontend_origin],
     secret_key_base: env!("SECRET_KEY_BASE", :string!)
 end

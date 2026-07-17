@@ -3,28 +3,26 @@ defmodule AllayWeb.EndpointConfigTest do
 
   alias AllayWeb.EndpointConfig
 
-  describe "origin/1" do
-    test "nil → localhost with origin check disabled" do
-      assert EndpointConfig.origin(nil) == {"localhost", false}
+  describe "backend_host/1" do
+    test "nil uses localhost" do
+      assert EndpointConfig.backend_host(nil) == "localhost"
     end
 
     test "empty string → localhost with origin check disabled" do
-      assert EndpointConfig.origin("") == {"localhost", false}
+      assert EndpointConfig.backend_host("") == "localhost"
     end
 
     test "https URL → host stripped, full origin allowed" do
-      assert EndpointConfig.origin("https://allay.example") ==
-               {"allay.example", ["https://allay.example"]}
+      assert EndpointConfig.backend_host("https://api.allay.example") == "api.allay.example"
     end
 
     test "http URL with port → host without port, full origin allowed" do
-      assert EndpointConfig.origin("http://10.0.0.5:8080") ==
-               {"10.0.0.5", ["http://10.0.0.5:8080"]}
+      assert EndpointConfig.backend_host("http://10.0.0.5:8080") == "10.0.0.5"
     end
 
     test "scheme-less value → treated as the host verbatim" do
       # URI.parse("allay.local").host is nil, so the whole string becomes the host.
-      assert EndpointConfig.origin("allay.local") == {"allay.local", ["allay.local"]}
+      assert EndpointConfig.backend_host("allay.local") == "allay.local"
     end
   end
 end

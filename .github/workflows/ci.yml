@@ -15,29 +15,46 @@ jobs:
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
   test-frontend:
     name: Test Frontend
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:frontend
-      - run: pnpm -F allay-frontend build
+      - run: pnpm test
+      - run: pnpm build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: allay-frontend-${{ github.sha }}
+          path: frontend/dist
+          if-no-files-found: error
 
   test-backend:
     name: Test Backend (Elixir)
@@ -80,8 +97,8 @@ jobs:
       - run: mix deps.get
       - run: mix check
 
-  build-image:
-    name: Build release image
+  build-backend-image:
+    name: Build backend image
     runs-on: ubuntu-latest
     needs: [lint, test-backend, test-frontend]
     steps:
@@ -101,7 +118,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/pivattogui/allay
+          images: ghcr.io/pivattogui/allay-backend
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=main-,enable={{is_default_branch}}
@@ -110,13 +127,13 @@ jobs:
             type=semver,pattern={{major}}
           labels: |
             org.opencontainers.image.source=https://github.com/pivattogui/allay
-            org.opencontainers.image.description=Self-hosted Minecraft server management
+            org.opencontainers.image.description=Allay backend and Minecraft runtime orchestration
             org.opencontainers.image.licenses=AGPL-3.0-or-later
 
-      - name: Build and optionally publish release image
+      - name: Build and optionally publish backend image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./backend
           file: backend/Dockerfile
           platforms: ${{ github.event_name == 'push' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ github.event_name == 'push' }}

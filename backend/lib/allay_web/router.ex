@@ -109,8 +109,4 @@ defmodule AllayWeb.Router do
       live_dashboard "/dashboard", metrics: AllayWeb.Telemetry
     end
   end
-
-  scope "/", AllayWeb do
-    get "/*path", SPAController, :index
-  end
 end

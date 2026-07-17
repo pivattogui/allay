@@ -1,5 +1,6 @@
 import { type Channel as PhoenixChannel, Socket } from 'phoenix'
 import { create } from 'zustand'
+import { backendSocketUrl } from '../lib/backend'
 import { queryClient } from '../lib/queryClient'
 import { serverKeys } from '../lib/queryKeys'
 import { useAuthStore } from './authStore'
@@ -63,7 +64,7 @@ function ensureSocket(get: () => WebSocketState, set: (partial: Partial<WebSocke
   if (existing) return existing
 
   const token = useAuthStore.getState().token
-  const socket = new Socket('/socket', { params: { token } })
+  const socket = new Socket(backendSocketUrl(), { params: { token } })
   socket.onOpen(() => set({ isConnected: true }))
   socket.onClose(() => set({ isConnected: false }))
   socket.onError(() => set({ isConnected: false }))

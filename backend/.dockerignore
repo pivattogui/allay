@@ -1,5 +1,9 @@
 _build
 deps
-priv/static
+.env
+data
+test
+priv/plts
+*.md
 *.tar
 .elixir_ls

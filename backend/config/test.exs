@@ -41,6 +41,9 @@ config :allay, :minecraft_req_options, plug: {Req.Test, Allay.Minecraft.APIStub}
 # by calling Boot.run/1 directly.
 config :allay, :boot_autostart, false
 
+# Keep runtime discovery deterministic. Individual tests provide fake JDK roots.
+config :allay, :java_auto_discovery, false
+
 # Oban manual testing mode disables queue draining and plugins so tests
 # control job execution explicitly via Oban.Testing helpers.
 config :allay, Oban, testing: :manual

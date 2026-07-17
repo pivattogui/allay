@@ -1,100 +1,21 @@
 # Allay
 
-Self-hosted Minecraft server management platform. Create, monitor, and manage multiple Minecraft servers from a single web dashboard.
+Self-hosted Minecraft server management platform. The backend manages local Minecraft processes and files; the frontend is an independently built web client.
 
 ```text
-Browser ──► Allay container ──► PostgreSQL
-            Phoenix release
-                 │
-                 ├── /             React SPA
-                 ├── /api/*        REST API
-                 ├── /socket       Phoenix Channels
-                 ├── /health       liveness endpoint
-                 └── OTP runtimes ──► Java server processes
+Browser ──► React frontend ──► Phoenix API ──► PostgreSQL
+                 │                 │
+                 └── Channels ─────┴──► Java server processes
 ```
 
-The supported deployment topology is one Allay application node controlling local Minecraft processes and files. On application startup, servers configured with `auto_start` are started. All other servers remain stopped.
+The backend and frontend have separate configuration, build artifacts, and deployment lifecycles. This repository intentionally does not prescribe deployment orchestration.
 
-## Features
+## Projects
 
-- **Server lifecycle** — create, start, stop, restart, and migrate servers
-- **Real-time console** — live logs, metrics, status, and commands through Phoenix Channels
-- **Backups** — manual and scheduled tar.gz backups with retention and restore
-- **File manager** — browse, edit, download, and upload server files
-- **Metrics** — per-process CPU, RAM, and player monitoring
-- **Version management** — download and switch between Vanilla and Paper versions
-- **Scheduled restarts** — persistent Oban-backed cron scheduling
-- **Authentication** — database-backed API tokens with a first-run setup wizard
-
-## Self-hosting
-
-Download the production compose file and environment template:
-
-```bash
-curl -O https://raw.githubusercontent.com/pivattogui/allay/main/docker-compose.yml
-curl -O https://raw.githubusercontent.com/pivattogui/allay/main/.env.example
-mv .env.example .env
-```
-
-Set at least these values in `.env`:
-
-```dotenv
-SECRET_KEY_BASE=<generate-with-mix-phx.gen.secret>
-DB_PASSWORD=<strong-database-password>
-```
-
-Create the application data directory with the runtime user's ownership, then start the stack:
-
-```bash
-mkdir -p data/allay data/postgres
-sudo chown -R 1000:1000 data/allay
-docker compose up -d
-```
-
-Open [http://localhost:8080](http://localhost:8080) and create the administrator account.
-
-`SECRET_KEY_BASE` and `DB_PASSWORD` are required. Compose refuses to start without them.
-
-### Updating
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-Pin a release with `ALLAY_VERSION`, for example `1.2.3`, `1.2`, or `main-abc1234`.
-
-### Reverse proxy
-
-Allay serves the SPA, API, and WebSocket endpoint on the same HTTP port. Example Caddy configuration:
-
-```caddy
-allay.example.com {
-  reverse_proxy localhost:8080
-}
-```
-
-Set `ALLAY_PUBLIC_ORIGIN=https://allay.example.com` so Phoenix can validate the WebSocket origin and generate the canonical URL.
-
-For nginx, forward WebSocket upgrade headers:
-
-```nginx
-location / {
-  proxy_pass http://127.0.0.1:8080;
-  proxy_http_version 1.1;
-  proxy_set_header Upgrade $http_upgrade;
-  proxy_set_header Connection "upgrade";
-  proxy_set_header Host $host;
-}
-```
-
-### Minecraft ports
-
-The web UI uses `ALLAY_PORT`. Minecraft uses the raw TCP range configured by `MC_PORT_MIN` and `MC_PORT_MAX`, defaulting to `25565` through `25575`. Expose and forward that range directly to the Allay host.
-
-### Data backup
-
-Allay backs up Minecraft server data. It does not back up PostgreSQL. Back up `./data/postgres` or use `pg_dump` in addition to the application backups.
+| Path | Stack | Development port | Responsibility |
+|---|---|---:|---|
+| `backend/` | Elixir 1.18, Phoenix 1.8, Ecto, Oban | 4000 | REST API, Channels, persistence, jobs, and Minecraft runtime orchestration |
+| `frontend/` | React 19, Vite, TanStack Query, Zustand | 5173 | Browser application |
 
 ## Local development
 
@@ -105,20 +26,22 @@ Allay backs up Minecraft server data. It does not back up PostgreSQL. Back up `.
 - PostgreSQL 17
 - Java 21 and/or 25 for running Minecraft locally
 
-Versions used by CI are recorded in `backend/.tool-versions` and the root `package.json`.
+Runtime versions are owned by each project in `backend/.tool-versions` and `frontend/.tool-versions`. The repository root does not define a shared toolchain.
 
-### Setup
-
-Start PostgreSQL:
+Start the development PostgreSQL instance from the backend directory. The Compose file owns only this local dependency; it does not run the backend or frontend:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d postgres
+cd backend
+docker compose up -d
 ```
+
+The backend development default expects `ecto://allay:allay@localhost:5432/allay_dev`; override it in `backend/.env` when your local database differs.
 
 Run the backend:
 
 ```bash
 cd backend
+cp .env.example .env
 mix setup
 mix phx.server
 ```
@@ -126,63 +49,63 @@ mix phx.server
 Run the frontend in another terminal:
 
 ```bash
+cd frontend
 pnpm install --frozen-lockfile
-pnpm dev:frontend
+pnpm dev
 ```
 
-Vite runs on port `5173` and proxies `/api` and `/socket` to Phoenix on port `4000`.
+The frontend opens at `http://localhost:5173`. Without a frontend `.env`, Vite proxies `/api` and `/socket` to `http://localhost:4000`. To call another backend directly, copy `frontend/.env.example` to `frontend/.env` and set `VITE_BACKEND_URL`.
 
-### Verification
+## Independent builds
+
+Build the backend image from its project directory:
 
 ```bash
-cd backend && mix check
-pnpm lint
-pnpm test:frontend
-pnpm build
+cd backend
+docker build -t allay-backend .
 ```
 
-`mix check` runs compilation with warnings as errors, formatting, Credo, Dialyzer, and the backend test suite.
+The image contains only the Phoenix release and Java runtimes. It requires `DATABASE_URL`, `SECRET_KEY_BASE`, and `FRONTEND_ORIGIN` at runtime.
 
-## Configuration
+Build the frontend static artifact:
+
+```bash
+cd frontend
+VITE_BACKEND_URL=https://api.allay.example pnpm build
+```
+
+Publish `frontend/dist/` using a static host. `VITE_BACKEND_URL` is embedded at build time, so a different backend URL requires a new frontend build.
+
+## Configuration ownership
+
+Backend variables belong in `backend/.env` for native development or in the backend runtime environment:
+
+| Variable | Production | Default | Description |
+|---|---:|---|---|
+| `DATABASE_URL` | required | development database | PostgreSQL connection URL |
+| `SECRET_KEY_BASE` | required | development-only value | Phoenix signing secret |
+| `FRONTEND_ORIGIN` | required | `http://localhost:5173` in development | Exact browser origin allowed by CORS and Channels |
+| `ALLAY_PUBLIC_ORIGIN` | optional | unset | Public backend URL used for its canonical host |
+| `MC_PORT_MIN` / `MC_PORT_MAX` | optional | `25565` / `25575` | Minecraft TCP port range |
+| `DATA_DIR` | optional | `data` | Runtime data directory |
+| `PORT` | optional | `4000` | Backend HTTP port |
+| `POOL_SIZE` | optional | `10` | Ecto connection pool size |
+| `JAVA_SCAN_DIRS` | optional | platform defaults | Colon-separated JDK roots |
+
+Frontend variables belong in `frontend/.env` or in the frontend build environment:
 
 | Variable | Required | Default | Description |
 |---|---:|---|---|
-| `SECRET_KEY_BASE` | production | none | Phoenix signing secret |
-| `DB_PASSWORD` | bundled PostgreSQL | none | PostgreSQL password |
-| `DATABASE_URL` | production | derived by Compose | Ecto connection URL |
-| `ALLAY_VERSION` | no | `latest` | Container image tag |
-| `ALLAY_PORT` | no | `8080` | Host port mapped to container port 4000 |
-| `ALLAY_PUBLIC_ORIGIN` | no | unset | Canonical public origin and WebSocket allowlist |
-| `MC_PORT_MIN` / `MC_PORT_MAX` | no | `25565` / `25575` | Minecraft TCP port range |
-| `DATA_DIR` | no | `data` locally, `/app/data` in the image | Runtime data directory |
-| `PORT` | no | `4000` | Phoenix HTTP port |
-| `POOL_SIZE` | no | `10` | Ecto connection pool size |
-| `JAVA_SCAN_DIRS` | no | platform defaults | Colon-separated JDK roots for native development |
+| `VITE_BACKEND_URL` | production | empty | Public backend origin used by REST and WebSocket clients |
 
-## Project structure
+`FRONTEND_ORIGIN` and `VITE_BACKEND_URL` describe opposite sides of the boundary: the backend controls which browser origin may connect, while the frontend controls which backend it calls.
 
-```text
-allay/
-├── backend/                 Phoenix application and OTP runtime orchestration
-│   ├── lib/allay/           contexts, schemas, workers, and runtime processes
-│   ├── lib/allay_web/       REST API, Channels, and SPA serving
-│   ├── priv/repo/           Ecto migrations
-│   └── Dockerfile           frontend build + Phoenix release + Java runtimes
-├── frontend/                React 19 SPA
-├── docker-compose.yml       production deployment
-└── docker-compose.dev.yml   development PostgreSQL
+## Verification
+
+```bash
+cd backend && mix check
+cd ../frontend && pnpm lint && pnpm test && pnpm build
 ```
-
-## Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Elixir 1.18, Phoenix 1.8, OTP |
-| Persistence | PostgreSQL 17, Ecto, Oban |
-| Realtime | Phoenix Channels and PubSub |
-| Frontend | React 19, Vite, TanStack Query, Zustand |
-| UI | Tailwind CSS and Radix UI |
-| Minecraft runtime | Temurin Java 21 and 25 |
 
 ## License
 

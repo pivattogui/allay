@@ -67,6 +67,16 @@ defmodule Allay.Minecraft.JavaRuntimeTest do
       assert %{17 => _} = JavaRuntime.discover([base])
     end
 
+    test "discovers the standard macOS JDK layout", %{base: base} do
+      bin = Path.join([base, "temurin-25.jdk", "Contents", "Home", "bin"])
+      File.mkdir_p!(bin)
+      java = Path.join(bin, "java")
+      File.write!(java, "#!/bin/sh\necho 'openjdk version \"25.0.2\"' >&2\n")
+      File.chmod!(java, 0o755)
+
+      assert JavaRuntime.discover([base]) == %{25 => java}
+    end
+
     test "first occurrence per major wins", %{base: base} do
       fake_jdk!(base, "a-first", :stderr, "21.0.1")
       fake_jdk!(base, "b-second", :stderr, "21.0.9")
@@ -100,6 +110,15 @@ defmodule Allay.Minecraft.JavaRuntimeTest do
       File.chmod!(java, 0o755)
 
       assert JavaRuntime.discover([base]) == %{}
+    end
+
+    test "a hanging executable is rejected after the probe timeout", %{base: base} do
+      File.mkdir_p!(base)
+      java = Path.join(base, "hanging-java")
+      File.write!(java, "#!/bin/sh\nsleep 10\n")
+      File.chmod!(java, 0o755)
+
+      assert JavaRuntime.probe_major(java, 10) == nil
     end
   end
 

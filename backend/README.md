@@ -1,18 +1,38 @@
-# Allay
+# Allay backend
 
-To start your Phoenix server:
+Independent Phoenix API and Minecraft runtime orchestrator.
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+## Development
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+Start the local PostgreSQL dependency, then run the backend:
 
-Ready to run in production? Please [check our deployment guides](https://phoenix.hexdocs.pm/deployment.html).
+```bash
+docker compose up -d
+cp .env.example .env
+mix setup
+mix phx.server
+```
 
-## Learn more
+The Compose file runs only PostgreSQL 17. Stop it with `docker compose down`; its named volume preserves the database data.
 
-* Official website: https://www.phoenixframework.org/
-* Guides: https://phoenix.hexdocs.pm/overview.html
-* Docs: https://phoenix.hexdocs.pm
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+The backend listens on `http://localhost:4000` and exposes:
+
+- `/api/*` for the REST API;
+- `/socket` for Phoenix Channels;
+- `/health` for liveness checks.
+
+It does not build or serve the frontend. Set `FRONTEND_ORIGIN` to the exact browser origin allowed by CORS and Channels.
+
+## Verification
+
+```bash
+mix check
+```
+
+## Container image
+
+```bash
+docker build -t allay-backend .
+```
+
+The image requires `DATABASE_URL`, `SECRET_KEY_BASE`, and `FRONTEND_ORIGIN` at runtime. It runs database migrations before starting the release.

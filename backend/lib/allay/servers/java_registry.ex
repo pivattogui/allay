@@ -23,8 +23,15 @@ defmodule Allay.Servers.JavaRegistry do
   asdf/Homebrew install root).
   """
   def discover do
-    scan_dirs = Application.get_env(:allay, :java_scan_dirs, JavaRuntime.default_scan_dirs())
-    runtimes = JavaRuntime.discover(scan_dirs)
+    scan_dirs = Application.get_env(:allay, :java_scan_dirs, [])
+
+    runtimes =
+      if Application.get_env(:allay, :java_auto_discovery, true) do
+        JavaRuntime.discover_system(scan_dirs)
+      else
+        JavaRuntime.discover(scan_dirs)
+      end
+
     put(runtimes)
     runtimes
   end
@@ -42,5 +49,26 @@ defmodule Allay.Servers.JavaRegistry do
   """
   def find_compatible(required) when is_integer(required) do
     JavaRuntime.find_compatible(runtimes(), required)
+  end
+
+  @doc """
+  Resolves an executable runtime for a start operation. A stale or missing
+  registry entry triggers discovery once before the operation is rejected.
+  """
+  def find_available_compatible(required) when is_integer(required) do
+    case available_compatible(runtimes(), required) do
+      nil -> discover() |> available_compatible(required)
+      runtime -> runtime
+    end
+  end
+
+  defp available_compatible(runtimes, required) do
+    case JavaRuntime.find_compatible(runtimes, required) do
+      {major, path} ->
+        if JavaRuntime.probe_major(path) == major, do: {major, path}
+
+      nil ->
+        nil
+    end
   end
 end

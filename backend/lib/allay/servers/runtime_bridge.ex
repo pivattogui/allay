@@ -5,17 +5,18 @@ defmodule Allay.Servers.RuntimeBridge do
 
   Resolver policy (parity debt carried from Plans 2/3 — pinned by tests):
 
-    1. `server.java_path` present → used verbatim as the java binary. The
-       registry is NOT consulted; an explicit override wins unconditionally.
+    1. `server.java_path` present → probed before use. The registry is NOT
+       consulted, but an unavailable or invalid executable blocks startup.
     2. else `server.java_version` parses to an integer major →
-       `JavaRegistry.find_compatible/1` (exact or forward-fall). A miss is a
-       typed `{:error, {:java_runtime_unavailable, msg}}` — it NEVER falls
-       back to a PATH java. The legacy asdf/PATH fallback is intentionally dead.
+       `JavaRegistry.find_available_compatible/1` (exact or forward-fall). A
+       stale or missing entry triggers automatic discovery once. A miss is a
+       typed `{:error, {:java_runtime_unavailable, msg}}`.
     3. else (java_version nil or unparseable) →
        `{:error, {:java_runtime_unavailable, msg}}`. Every Elixir-provisioned
        row has a java_version, so this is a guard, not a routine path.
   """
 
+  alias Allay.Minecraft.JavaRuntime
   alias Allay.Runtime.Spec
   alias Allay.Servers.JavaRegistry
   alias Allay.Servers.Server
@@ -31,7 +32,14 @@ defmodule Allay.Servers.RuntimeBridge do
   end
 
   defp resolve_java_bin(%Server{java_path: path}) when is_binary(path) and path != "" do
-    {:ok, path}
+    case JavaRuntime.probe_major(path) do
+      major when is_integer(major) ->
+        {:ok, path}
+
+      nil ->
+        {:error,
+         {:java_runtime_unavailable, "Configured Java executable is unavailable: #{path}"}}
+    end
   end
 
   defp resolve_java_bin(%Server{java_version: version} = server) do
@@ -42,7 +50,7 @@ defmodule Allay.Servers.RuntimeBridge do
   end
 
   defp resolve_from_registry(major) do
-    case JavaRegistry.find_compatible(major) do
+    case JavaRegistry.find_available_compatible(major) do
       {_major, path} -> {:ok, path}
       nil -> {:error, {:java_runtime_unavailable, unavailable_message(major)}}
     end

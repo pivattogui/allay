@@ -1,74 +1,39 @@
-# Allay - Frontend
+# Allay frontend
 
-Web interface for server management.
-
-## Stack
-
-- React 19 + TypeScript
-- Vite
-- TailwindCSS + shadcn/ui
-- React Router
-
-## Requirements
-
-- Node.js 22+
-- pnpm
-
-## Setup
-
-```bash
-# Install dependencies
-pnpm install
-
-# Copy environment variables (optional)
-cp .env.example .env
-
-# Start in development
-pnpm dev
-```
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start with hot-reload (port 5173) |
-| `pnpm build` | Build for production |
-| `pnpm preview` | Preview build |
-| `pnpm lint` | Run ESLint |
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VITE_API_URL` | Backend API URL | `http://localhost:3000` |
+Independent React browser client for the Allay backend.
 
 ## Development
 
-Vite proxy automatically forwards:
-- `/api/*` -> Backend API
-- `/ws/*` -> Backend WebSocket
-
-Make sure the backend is running on `localhost:3000`.
-
-## Structure
-
-```
-src/
-├── api/          # API clients
-├── components/   # React components
-│   └── ui/       # shadcn/ui components
-├── hooks/        # Custom hooks
-├── lib/          # Utilities
-├── pages/        # Pages/routes
-├── stores/       # Global state
-└── App.tsx       # Root component
+```bash
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-## Docker
+Vite runs on port `5173`. With no `.env`, it proxies `/api` and `/socket` to `http://localhost:4000`.
+
+To call a backend directly:
 
 ```bash
-docker build -t allay-frontend .
-docker run -p 80:80 allay-frontend
+cp .env.example .env
+pnpm dev
 ```
 
-Dockerfile uses nginx to serve static files in production.
+`VITE_BACKEND_URL` must be an origin without a trailing path, such as `https://api.allay.example`. The backend must allow the frontend's browser origin through `FRONTEND_ORIGIN`.
+
+## Production artifact
+
+```bash
+VITE_BACKEND_URL=https://api.allay.example pnpm build
+```
+
+The deployable static artifact is written to `dist/`. The backend URL is embedded at build time.
+
+## Scripts
+
+| Command | Purpose |
+|---|---|
+| `pnpm dev` | Start the development server |
+| `pnpm build` | Type-check and build the static artifact |
+| `pnpm preview` | Preview the built artifact |
+| `pnpm test` | Run frontend tests |
+| `pnpm lint` | Run Biome lint and formatting checks |

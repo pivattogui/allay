@@ -5,9 +5,28 @@ defmodule Allay.Minecraft.JavaRuntime do
   must capture stderr or every runtime is silently missed.
   """
 
-  @default_scan_dirs ["/opt/java", "/usr/lib/jvm"]
+  @system_scan_dirs [
+    "/opt/java",
+    "/usr/lib/jvm",
+    "/opt/homebrew/opt",
+    "/usr/local/opt",
+    "/Library/Java/JavaVirtualMachines"
+  ]
+  @probe_timeout_ms 2_000
 
-  def default_scan_dirs, do: @default_scan_dirs
+  def default_scan_dirs do
+    case System.user_home() do
+      nil ->
+        @system_scan_dirs
+
+      home ->
+        [
+          Path.join(home, ".asdf/installs/java"),
+          Path.join(home, ".sdkman/candidates/java")
+          | @system_scan_dirs
+        ]
+    end
+  end
 
   def parse_java_major(output) when is_binary(output) do
     case Regex.run(~r/version "([^"]+)"/, output) do
@@ -26,15 +45,74 @@ defmodule Allay.Minecraft.JavaRuntime do
   Returns `%{major => java_bin_path}`. First occurrence per major wins
   (scan order = given dir order, entries sorted for determinism).
   """
-  def discover(scan_dirs \\ @default_scan_dirs) do
-    for dir <- scan_dirs,
-        {:ok, entries} <- [File.ls(dir)],
-        entry <- Enum.sort(entries),
-        java = Path.join([dir, entry, "bin", "java"]),
-        major = probe(java),
+  def discover(scan_dirs \\ default_scan_dirs()) do
+    scan_dirs
+    |> Enum.flat_map(&java_candidates/1)
+    |> discover_executables()
+  end
+
+  @doc """
+  Discovers Java from explicit roots, common installation managers, JAVA_HOME,
+  and the executable available on PATH. Explicit roots have highest priority.
+  """
+  def discover_system(scan_dirs \\ []) do
+    explicit_candidates =
+      scan_dirs
+      |> Enum.uniq()
+      |> Enum.flat_map(&java_candidates/1)
+
+    direct_candidates = [java_home_executable(), System.find_executable("java")]
+
+    default_candidates =
+      default_scan_dirs()
+      |> Enum.reject(&(&1 in scan_dirs))
+      |> Enum.flat_map(&java_candidates/1)
+
+    discover_executables(explicit_candidates ++ direct_candidates ++ default_candidates)
+  end
+
+  @doc "Returns the executable's Java major, or nil when it cannot be executed or identified."
+  def probe_major(java_bin, timeout_ms \\ @probe_timeout_ms)
+
+  def probe_major(java_bin, timeout_ms) when is_binary(java_bin) and is_integer(timeout_ms) do
+    probe(java_bin, timeout_ms)
+  end
+
+  def probe_major(_java_bin, _timeout_ms), do: nil
+
+  defp discover_executables(java_executables) do
+    for java <- java_executables,
+        is_binary(java),
+        major = probe(java, @probe_timeout_ms),
         is_integer(major),
         reduce: %{} do
       acc -> Map.put_new(acc, major, java)
+    end
+  end
+
+  defp java_candidates(dir) do
+    case File.ls(dir) do
+      {:ok, entries} ->
+        entries
+        |> Enum.sort()
+        |> Enum.flat_map(fn entry ->
+          installation_dir = Path.join(dir, entry)
+
+          [
+            Path.join([installation_dir, "bin", "java"]),
+            Path.join([installation_dir, "Contents", "Home", "bin", "java"])
+          ]
+        end)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp java_home_executable do
+    case System.get_env("JAVA_HOME") do
+      nil -> nil
+      java_home -> Path.join([java_home, "bin", "java"])
     end
   end
 
@@ -55,16 +133,22 @@ defmodule Allay.Minecraft.JavaRuntime do
     end
   end
 
-  defp probe(java_bin) do
-    with true <- File.exists?(java_bin),
-         {output, 0} <- System.cmd(java_bin, ["-version"], stderr_to_stdout: true) do
-      parse_java_major(output)
-    else
-      _ -> nil
+  defp probe(java_bin, timeout_ms) do
+    if File.exists?(java_bin) do
+      task =
+        Task.async(fn ->
+          try do
+            System.cmd(java_bin, ["-version"], stderr_to_stdout: true)
+          rescue
+            ErlangError -> :probe_failed
+          end
+        end)
+
+      case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
+        {:ok, {output, 0}} -> parse_java_major(output)
+        _other -> nil
+      end
     end
-  rescue
-    # System.cmd raises for non-executable files
-    ErlangError -> nil
   end
 
   defp parse_int(string) do

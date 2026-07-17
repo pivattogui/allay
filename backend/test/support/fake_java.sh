@@ -9,6 +9,11 @@
 #                              deterministically AFTER reaching running.
 # Writes "Done"-style lines to logs/latest.log like the real server.
 
+if [ "$1" = "-version" ]; then
+  echo 'openjdk version "21.0.1"' >&2
+  exit 0
+fi
+
 mkdir -p logs
 case "$FAKE_BEHAVIOR" in
   early-crash)

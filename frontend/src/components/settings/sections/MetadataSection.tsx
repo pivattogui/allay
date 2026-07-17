@@ -11,6 +11,7 @@ import {
   useUpdateServerConfig,
   useUploadServerIcon,
 } from '@/hooks/useServerConfig'
+import { backendFetch as fetch } from '@/lib/backend'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores'
 

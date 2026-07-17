@@ -1,14 +1,16 @@
 {
   "name": "allay-frontend",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.20.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build",
     "preview": "vite preview",
-    "lint": "biome check src/",
-    "format": "biome format --write src/",
-    "format:check": "biome check src/",
+    "lint": "biome ci .",
+    "format": "biome check --write .",
+    "format:check": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -43,6 +45,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.12",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

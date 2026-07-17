@@ -40,9 +40,8 @@ config :allay, :data_dir, "data"
 
 config :allay, :mc_port_range, 25_565..25_575
 
-# JDK install roots scanned at boot for available Java majors. These are the
-# Linux locations the release image populates (Temurin debs). Native dev on
-# macOS/asdf/Homebrew overrides this with JAVA_SCAN_DIRS in runtime.exs.
+# Explicit JDK install roots scanned first at boot. Automatic discovery also
+# checks JAVA_HOME, PATH, installation managers, and platform locations.
 config :allay, :java_scan_dirs, ["/opt/java", "/usr/lib/jvm"]
 
 # Max upload size for server-import archives (read at compile time by the

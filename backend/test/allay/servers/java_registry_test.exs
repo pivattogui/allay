@@ -48,4 +48,24 @@ defmodule Allay.Servers.JavaRegistryTest do
     assert runtimes[25] == java
     assert {25, ^java} = JavaRegistry.find_compatible(25)
   end
+
+  test "find_available_compatible/1 refreshes a stale registry before rejecting startup" do
+    base = Path.join(System.tmp_dir!(), "jdks-#{System.unique_integer([:positive])}")
+    bin = Path.join([base, "temurin-21", "bin"])
+    File.mkdir_p!(bin)
+    java = Path.join(bin, "java")
+    File.write!(java, "#!/bin/sh\necho 'openjdk version \"21.0.5\"' >&2\n")
+    File.chmod!(java, 0o755)
+
+    previous_scan_dirs = Application.get_env(:allay, :java_scan_dirs)
+    Application.put_env(:allay, :java_scan_dirs, [base])
+    JavaRegistry.put(%{21 => "/removed/java"})
+
+    on_exit(fn ->
+      Application.put_env(:allay, :java_scan_dirs, previous_scan_dirs)
+      File.rm_rf!(base)
+    end)
+
+    assert {21, ^java} = JavaRegistry.find_available_compatible(21)
+  end
 end

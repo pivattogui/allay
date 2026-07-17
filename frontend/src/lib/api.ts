@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores'
 import type { Backup, Server } from '../types/server'
+import { backendUrl, backendFetch as fetch } from './backend'
 
 export function getAuthHeaders(): HeadersInit {
   // Use store's token as single source of truth
@@ -312,7 +313,7 @@ export function analyzeImport(
     xhr.addEventListener('error', () => reject(new Error('Upload failed')))
     xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
 
-    xhr.open('POST', `/api/backups/${serverId}/import/analyze`)
+    xhr.open('POST', backendUrl(`/api/backups/${serverId}/import/analyze`))
     const token = useAuthStore.getState().token
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')

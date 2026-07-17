@@ -4,31 +4,31 @@ This file provides repository-specific guidance for automated coding agents.
 
 ## Project overview
 
-Allay is a self-hosted Minecraft server management platform. The Phoenix backend manages Java processes and local server files, persists configuration in PostgreSQL, and serves both a REST API and Phoenix Channels consumed by the React SPA.
+Allay is a self-hosted Minecraft server management platform. The Phoenix backend manages Java processes and local server files and persists configuration in PostgreSQL. The independently deployed React frontend consumes its REST API and Phoenix Channels.
 
 The supported production topology is a single Allay application node. Runtime ownership, process registries, logs, metrics, and filesystem access are node-local.
-
-See `ARCHITECTURE.md` for the complete architecture map.
 
 ## Projects
 
 | Path | Stack | Port | Purpose |
 |---|---|---:|---|
-| `backend/` | Elixir 1.18, Phoenix 1.8, Ecto, Oban | 4000 | API, Channels, static SPA, jobs, and OTP orchestration |
-| `frontend/` | React 19, Vite, TanStack Query, Zustand | 5173 | SPA source; compiled into the Phoenix release |
+| `backend/` | Elixir 1.18, Phoenix 1.8, Ecto, Oban | 4000 | API, Channels, jobs, and OTP orchestration |
+| `frontend/` | React 19, Vite, TanStack Query, Zustand | 5173 | Independently built browser application |
 
 ## Development commands
 
-Start PostgreSQL:
+Toolchain versions are declared independently in `backend/.tool-versions` and `frontend/.tool-versions`. Do not add a root `.tool-versions` file.
+
+Start the backend's local PostgreSQL dependency:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d postgres
+cd backend
+docker compose up -d
 ```
 
 Backend:
 
 ```bash
-cd backend
 mix setup
 mix phx.server
 mix test
@@ -36,17 +36,18 @@ mix check
 mix ecto.migrate
 ```
 
-Frontend, from the repository root:
+Frontend:
 
 ```bash
+cd frontend
 pnpm install --frozen-lockfile
-pnpm dev:frontend
+pnpm dev
 pnpm lint
-pnpm test:frontend
+pnpm test
 pnpm build
 ```
 
-Vite proxies `/api` and `/socket` to Phoenix on port 4000.
+Without `VITE_BACKEND_URL`, Vite proxies `/api` and `/socket` to Phoenix on port 4000. Production builds call the configured backend directly.
 
 ## Backend boundaries
 
@@ -95,7 +96,9 @@ REST routes use `AllayWeb.Plugs.ApiAuth`, which resolves a database-backed beare
 
 ## Production
 
-The multi-stage `backend/Dockerfile` builds the React SPA, creates a Phoenix release, and installs Temurin 21 and 25. The image runs Ecto migrations before starting the release. Production requires `SECRET_KEY_BASE` and `DATABASE_URL`; Compose derives the latter from the database settings.
+The `backend/Dockerfile` creates a Phoenix release and installs Temurin 21 and 25. It does not build or serve the frontend. The image runs Ecto migrations before starting the release and requires `SECRET_KEY_BASE`, `DATABASE_URL`, and `FRONTEND_ORIGIN`.
+
+The frontend produces an independent static artifact under `frontend/dist/`. Its backend origin is provided through `VITE_BACKEND_URL` at build time. No deployment orchestrator is maintained in this repository.
 
 ## Required verification
 
@@ -103,8 +106,9 @@ Before considering a change complete, run:
 
 ```bash
 cd backend && mix check
+cd ../frontend
 pnpm lint
-pnpm test:frontend
+pnpm test
 pnpm build
 ```
 
@@ -113,7 +117,7 @@ The GitHub Actions workflow runs the same validations. Image publication is part
 ## Dependency and repository rules
 
 - Commit `mix.lock` with backend dependency changes.
-- Commit the root `pnpm-lock.yaml` with frontend dependency changes.
-- Do not add backend packages to the pnpm workspace.
+- Commit `frontend/pnpm-lock.yaml` with frontend dependency changes.
+- Keep Node.js tooling inside `frontend/`; do not add a root package or pnpm workspace.
 - Keep generated frontend `dist/` and local backend `_build/`, `deps/`, and PLTs out of commits.
 - Use English for code, identifiers, comments, documentation, and commit messages.

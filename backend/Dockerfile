@@ -1,16 +1,5 @@
 # syntax=docker/dockerfile:1.7
 
-# ---- frontend-builder ----
-FROM node:22-slim AS frontend-builder
-RUN corepack enable
-WORKDIR /workspace
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY frontend/package.json ./frontend/
-RUN pnpm install --frozen-lockfile --filter allay-frontend...
-COPY frontend ./frontend
-RUN pnpm --filter allay-frontend build
-# Output: /workspace/frontend/dist
-
 # ---- elixir-builder ----
 FROM hexpm/elixir:1.18.4-erlang-27.3.4-debian-bookworm-20250428-slim AS elixir-builder
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential git ca-certificates \
@@ -18,13 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 WORKDIR /app
 ENV MIX_ENV=prod
 RUN mix local.hex --force && mix local.rebar --force
-COPY backend/mix.exs backend/mix.lock ./
+COPY mix.exs mix.lock ./
 RUN mix deps.get --only prod
 RUN mix deps.compile
-COPY backend/config ./config
-COPY backend/lib ./lib
-COPY backend/priv ./priv
-COPY --from=frontend-builder /workspace/frontend/dist ./priv/static
+COPY config ./config
+COPY lib ./lib
+COPY priv ./priv
 RUN mix compile
 RUN mix release
 # Output: /app/_build/prod/rel/allay

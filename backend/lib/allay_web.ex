@@ -17,8 +17,6 @@ defmodule AllayWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets favicon.ico robots.txt)
-
   def router do
     quote do
       use Phoenix.Router, helpers: false
@@ -51,8 +49,7 @@ defmodule AllayWeb do
     quote do
       use Phoenix.VerifiedRoutes,
         endpoint: AllayWeb.Endpoint,
-        router: AllayWeb.Router,
-        statics: AllayWeb.static_paths()
+        router: AllayWeb.Router
     end
   end
 
