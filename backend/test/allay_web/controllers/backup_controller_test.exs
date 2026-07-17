@@ -213,8 +213,11 @@ defmodule AllayWeb.BackupControllerTest do
     end
   end
 
-  describe "GET /api/backups/:serverId/:backupId/download" do
-    test "streams the archive as gzip attachment", %{conn: conn, data_dir: data_dir} do
+  describe "POST /api/backups/:serverId/:backupId/download" do
+    test "issues a ticket that downloads the archive without bearer auth", %{
+      conn: conn,
+      data_dir: data_dir
+    } do
       server = seeded_server(data_dir)
 
       create = post(conn, ~p"/api/backups/#{server.id}")
@@ -222,10 +225,14 @@ defmodule AllayWeb.BackupControllerTest do
       assert %{"backup" => %{"id" => backup_id, "filename" => filename}} =
                json_response(create, 201)
 
-      conn = get(conn, ~p"/api/backups/#{server.id}/#{backup_id}/download")
+      ticket = post(conn, ~p"/api/backups/#{server.id}/#{backup_id}/download")
+      assert %{"downloadPath" => download_path} = json_response(ticket, 200)
+
+      conn = conn |> delete_req_header("authorization") |> get(download_path)
 
       assert response(conn, 200)
       assert {"content-type", "application/gzip"} in conn.resp_headers
+      assert get_resp_header(conn, "cache-control") == ["no-store"]
 
       disposition =
         Enum.find_value(conn.resp_headers, fn {k, v} -> k == "content-disposition" && v end)
@@ -238,7 +245,7 @@ defmodule AllayWeb.BackupControllerTest do
     test "404 when the archive file is missing", %{conn: conn, data_dir: data_dir} do
       server = seeded_server(data_dir)
       backup = insert_backup(server)
-      conn = get(conn, ~p"/api/backups/#{server.id}/#{backup.id}/download")
+      conn = post(conn, ~p"/api/backups/#{server.id}/#{backup.id}/download")
       assert %{"code" => "BACKUP_FILE_NOT_FOUND"} = json_response(conn, 404)
     end
   end

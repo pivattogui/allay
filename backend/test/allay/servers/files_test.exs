@@ -336,69 +336,45 @@ defmodule Allay.Servers.FilesTest do
     end
   end
 
-  describe "save_uploads/4" do
-    defp tmp_upload(name, content) do
-      path = Path.join(System.tmp_dir!(), "allay_upload_#{System.unique_integer([:positive])}")
-      File.write!(path, content)
-      on_exit(fn -> File.rm_rf!(path) end)
-      %{filename: name, path: path}
-    end
-
-    test "creates the target dir and reports uploaded names + sizes + count" do
+  describe "prepare_upload/3 and commit_upload/5" do
+    test "prepares the temporary beside the destination and creates parents" do
       {scope, server, dir} = seed()
-      u1 = tmp_upload("a.txt", "aaa")
-      u2 = tmp_upload("b.txt", "bb")
 
-      assert {:ok, %{uploaded: uploaded, count: 2}} =
-               Servers.save_uploads(scope, server.id, "incoming", [u1, u2])
+      assert {:ok, %{path: "incoming/a.txt", temporary: temporary}} =
+               Servers.prepare_upload(scope, server.id, "incoming/a.txt")
 
-      assert Enum.sort_by(uploaded, & &1.name) == [
-               %{name: "a.txt", size: 3},
-               %{name: "b.txt", size: 2}
-             ]
-
-      assert File.read!(Path.join(dir, "incoming/a.txt")) == "aaa"
+      assert Path.dirname(temporary) == Path.join(dir, "incoming")
+      assert Path.basename(temporary) =~ ~r/^\.a\.txt\.upload-/
+      assert File.dir?(Path.join(dir, "incoming"))
     end
 
-    test "client traversal filename is reduced to its basename inside the target" do
+    test "commits the temporary atomically and overwrites the destination" do
       {scope, server, dir} = seed()
-      u = tmp_upload("../../evil.txt", "pwn")
+      File.write!(Path.join(dir, "a.txt"), "old")
+      assert {:ok, %{temporary: temporary}} = Servers.prepare_upload(scope, server.id, "a.txt")
+      File.write!(temporary, "new")
 
-      assert {:ok, %{uploaded: [%{name: "evil.txt"}], count: 1}} =
-               Servers.save_uploads(scope, server.id, "drop", [u])
+      assert {:ok, %{path: "a.txt", size: 3}} =
+               Servers.commit_upload(scope, server.id, "a.txt", temporary, 3)
 
-      assert File.read!(Path.join(dir, "drop/evil.txt")) == "pwn"
-      # Nothing escaped the sandbox root.
-      refute File.exists?(Path.join(dir, "../evil.txt"))
-      refute File.exists?(Path.expand("../evil.txt", dir))
+      assert File.read!(Path.join(dir, "a.txt")) == "new"
+      refute File.exists?(temporary)
     end
 
-    test "silently overwrites an existing file" do
-      {scope, server, dir} = seed()
-      File.mkdir_p!(Path.join(dir, "drop"))
-      File.write!(Path.join(dir, "drop/a.txt"), "old")
-      u = tmp_upload("a.txt", "new")
-
-      assert {:ok, %{count: 1}} = Servers.save_uploads(scope, server.id, "drop", [u])
-      assert File.read!(Path.join(dir, "drop/a.txt")) == "new"
-    end
-
-    test "target path that is an existing file → {:error, :not_a_directory}" do
-      {scope, server, dir} = seed()
-      File.write!(Path.join(dir, "afile"), "x")
-      u = tmp_upload("a.txt", "y")
-      assert {:error, :not_a_directory} = Servers.save_uploads(scope, server.id, "afile", [u])
-    end
-
-    test "any copy failure → {:error, :upload_error}" do
+    test "rejects a temporary outside the destination directory" do
       {scope, server, _dir} = seed()
+      temporary = Path.join(System.tmp_dir!(), "outside-#{System.unique_integer([:positive])}")
+      File.write!(temporary, "x")
+      on_exit(fn -> File.rm(temporary) end)
 
-      missing = %{
-        filename: "a.txt",
-        path: Path.join(System.tmp_dir!(), "absent_#{System.unique_integer([:positive])}")
-      }
+      assert {:error, :upload_error} =
+               Servers.commit_upload(scope, server.id, "a.txt", temporary, 1)
+    end
 
-      assert {:error, :upload_error} = Servers.save_uploads(scope, server.id, "drop", [missing])
+    test "rejects a directory target" do
+      {scope, server, dir} = seed()
+      File.mkdir_p!(Path.join(dir, "world"))
+      assert {:error, :is_directory} = Servers.prepare_upload(scope, server.id, "world")
     end
   end
 end

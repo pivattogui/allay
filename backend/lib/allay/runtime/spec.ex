@@ -28,8 +28,8 @@ defmodule Allay.Runtime.Spec do
                 respawn_delay_ms: 2_000,
                 rcon_mod: Allay.Minecraft.Rcon,
                 rcon_probe_ms: 1_000,
-                log_poll_ms: 200,
-                metrics_interval_ms: 5_000
+                log_poll_ms: 500,
+                metrics_interval_ms: 10_000
               ]
 
   @type t :: %__MODULE__{}

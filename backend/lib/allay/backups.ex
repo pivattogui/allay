@@ -114,7 +114,7 @@ defmodule Allay.Backups do
     base = Path.basename(server.directory)
 
     args =
-      ["-czf", archive_path] ++
+      ["--use-compress-program=gzip -1", "-cf", archive_path] ++
         exclude_args(server.id) ++
         ["-C", parent, base]
 

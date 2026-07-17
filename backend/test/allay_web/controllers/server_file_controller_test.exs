@@ -6,6 +6,7 @@ defmodule AllayWeb.ServerFileControllerTest do
 
   alias Allay.Accounts
   alias Allay.Servers.OperationLock
+  alias AllayWeb.DownloadTicket
 
   setup %{conn: conn} do
     user = user_fixture()
@@ -40,11 +41,11 @@ defmodule AllayWeb.ServerFileControllerTest do
       paths = [
         get(conn, "/api/servers/#{id}/files/read/foo.txt"),
         put(conn, "/api/servers/#{id}/files/write/foo.txt"),
-        get(conn, "/api/servers/#{id}/files/download/foo.txt"),
+        post(conn, "/api/servers/#{id}/files/download/foo.txt"),
         post(conn, "/api/servers/#{id}/files/list"),
         post(conn, "/api/servers/#{id}/files/mkdir/newdir"),
         post(conn, "/api/servers/#{id}/files/rename"),
-        post(conn, "/api/servers/#{id}/files/upload"),
+        put(conn, "/api/servers/#{id}/files/upload/foo.txt"),
         delete(conn, "/api/servers/#{id}/files/foo.txt")
       ]
 
@@ -396,15 +397,20 @@ defmodule AllayWeb.ServerFileControllerTest do
     end
   end
 
-  # ── GET /api/servers/:id/files/download/*path ────────────────────────────────
+  # ── POST /api/servers/:id/files/download/*path ───────────────────────────────
 
-  describe "GET /api/servers/:id/files/download/*path" do
-    test "200 sends the file as an attachment", %{conn: conn, tmp: tmp} do
+  describe "POST /api/servers/:id/files/download/*path" do
+    test "issues a ticket that downloads the file without bearer auth", %{conn: conn, tmp: tmp} do
       server = seeded_server(tmp)
-      conn = get(conn, "/api/servers/#{server.id}/files/download/server.jar")
+      ticket = post(conn, "/api/servers/#{server.id}/files/download/server.jar")
+      assert %{"downloadPath" => download_path} = json_response(ticket, 200)
+
+      conn = conn |> delete_req_header("authorization") |> get(download_path)
 
       assert response(conn, 200)
       assert {"content-type", "application/octet-stream"} in conn.resp_headers
+      assert get_resp_header(conn, "cache-control") == ["no-store"]
+      assert get_resp_header(conn, "referrer-policy") == ["no-referrer"]
 
       disposition =
         Enum.find_value(conn.resp_headers, fn {k, v} -> k == "content-disposition" && v end)
@@ -415,82 +421,108 @@ defmodule AllayWeb.ServerFileControllerTest do
 
     test "404 FILE_NOT_FOUND for missing file", %{conn: conn, tmp: tmp} do
       server = seeded_server(tmp)
-      conn = get(conn, "/api/servers/#{server.id}/files/download/ghost.bin")
+      conn = post(conn, "/api/servers/#{server.id}/files/download/ghost.bin")
       assert json_response(conn, 404)
     end
 
     test "400 DIR_DOWNLOAD_NOT_IMPLEMENTED for directory", %{conn: conn, tmp: tmp} do
       server = seeded_server(tmp)
-      conn = get(conn, "/api/servers/#{server.id}/files/download/world")
+      conn = post(conn, "/api/servers/#{server.id}/files/download/world")
       assert %{"code" => "DIR_DOWNLOAD_NOT_IMPLEMENTED"} = json_response(conn, 400)
     end
 
     test "404 SERVER_NOT_FOUND for unknown server", %{conn: conn} do
-      conn = get(conn, "/api/servers/#{Ecto.UUID.generate()}/files/download/foo.jar")
+      conn = post(conn, "/api/servers/#{Ecto.UUID.generate()}/files/download/foo.jar")
       assert %{"code" => "SERVER_NOT_FOUND"} = json_response(conn, 404)
+    end
+
+    test "404 DOWNLOAD_NOT_FOUND for an expired ticket", %{conn: conn, tmp: tmp} do
+      server = seeded_server(tmp)
+
+      path =
+        DownloadTicket.issue(conn, {:server_file, server.id, "server.jar"},
+          signed_at: System.system_time(:second) - 61
+        )
+
+      conn = conn |> delete_req_header("authorization") |> get(path)
+      assert %{"code" => "DOWNLOAD_NOT_FOUND"} = json_response(conn, 404)
+    end
+
+    test "404 DOWNLOAD_NOT_FOUND for an invalid ticket", %{conn: conn} do
+      conn = conn |> delete_req_header("authorization") |> get("/api/downloads/invalid")
+      assert %{"code" => "DOWNLOAD_NOT_FOUND"} = json_response(conn, 404)
     end
   end
 
-  # ── POST /api/servers/:id/files/upload ──────────────────────────────────────
+  # ── PUT /api/servers/:id/files/upload/*path ─────────────────────────────────
 
-  describe "POST /api/servers/:id/files/upload" do
-    # Build a %Plug.Upload{} backed by a real temp file.
-    defp plug_upload(content, filename) do
-      path = Path.join(System.tmp_dir!(), "upload-#{System.unique_integer([:positive])}")
-      File.write!(path, content)
-      %Plug.Upload{path: path, filename: filename, content_type: "application/octet-stream"}
-    end
-
-    test "200 uploads a single file to root", %{conn: conn, tmp: tmp} do
+  describe "PUT /api/servers/:id/files/upload/*path" do
+    test "200 streams a file to root", %{conn: conn, tmp: tmp} do
       server = seeded_server(tmp)
-      upload = plug_upload("mod-data", "mod.jar")
 
       conn =
         conn
-        |> put_req_header("content-type", "multipart/form-data")
-        |> post("/api/servers/#{server.id}/files/upload?path=", %{"files" => upload})
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put("/api/servers/#{server.id}/files/upload/mod.jar", "mod-data")
 
-      assert %{"success" => true, "count" => 1, "uploaded" => [u]} = json_response(conn, 200)
-      assert u["name"] == "mod.jar"
-      assert u["size"] == 8
-      assert File.exists?(Path.join(server.directory, "mod.jar"))
+      assert %{"success" => true, "path" => "mod.jar", "size" => 8} =
+               json_response(conn, 200)
+
+      assert File.read!(Path.join(server.directory, "mod.jar")) == "mod-data"
     end
 
-    test "200 uploads multiple files (list under same field)", %{conn: conn, tmp: tmp} do
+    test "200 uploads an empty file", %{conn: conn, tmp: tmp} do
       server = seeded_server(tmp)
-      u1 = plug_upload("aaa", "a.txt")
-      u2 = plug_upload("bbbb", "b.txt")
 
       conn =
         conn
-        |> put_req_header("content-type", "multipart/form-data")
-        |> post("/api/servers/#{server.id}/files/upload?path=plugins", %{"files" => [u1, u2]})
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put("/api/servers/#{server.id}/files/upload/empty.txt", "")
 
-      assert %{"success" => true, "count" => 2} = json_response(conn, 200)
+      assert %{"size" => 0} = json_response(conn, 200)
+      assert File.read!(Path.join(server.directory, "empty.txt")) == ""
     end
 
-    test "200 uploads into subdir (created if needed)", %{conn: conn, tmp: tmp} do
+    test "200 creates a subdirectory and atomically overwrites", %{conn: conn, tmp: tmp} do
       server = seeded_server(tmp)
-      upload = plug_upload("x", "x.txt")
+      File.mkdir_p!(Path.join(server.directory, "mods"))
+      File.write!(Path.join([server.directory, "mods", "x.txt"]), "old")
 
       conn =
         conn
-        |> put_req_header("content-type", "multipart/form-data")
-        |> post("/api/servers/#{server.id}/files/upload?path=mods", %{"files" => upload})
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put("/api/servers/#{server.id}/files/upload/mods/x.txt", "new")
 
       assert %{"success" => true} = json_response(conn, 200)
-      assert File.exists?(Path.join([server.directory, "mods", "x.txt"]))
+      assert File.read!(Path.join([server.directory, "mods", "x.txt"])) == "new"
     end
 
     test "404 SERVER_NOT_FOUND for unknown server", %{conn: conn} do
-      upload = plug_upload("x", "x.txt")
+      conn =
+        conn
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put("/api/servers/#{Ecto.UUID.generate()}/files/upload/x.txt", "x")
+
+      assert %{"code" => "SERVER_NOT_FOUND"} = json_response(conn, 404)
+    end
+
+    test "413 rejects a body over the configured limit and removes the temporary", %{
+      conn: conn,
+      tmp: tmp
+    } do
+      server = seeded_server(tmp)
+      previous = Application.fetch_env!(:allay, :max_upload_bytes)
+      Application.put_env(:allay, :max_upload_bytes, 4)
+      on_exit(fn -> Application.put_env(:allay, :max_upload_bytes, previous) end)
 
       conn =
         conn
-        |> put_req_header("content-type", "multipart/form-data")
-        |> post("/api/servers/#{Ecto.UUID.generate()}/files/upload?path=", %{"files" => upload})
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put("/api/servers/#{server.id}/files/upload/large.bin", "12345")
 
-      assert %{"code" => "SERVER_NOT_FOUND"} = json_response(conn, 404)
+      assert %{"code" => "UPLOAD_TOO_LARGE"} = json_response(conn, 413)
+      refute File.exists?(Path.join(server.directory, "large.bin"))
+      assert Path.wildcard(Path.join(server.directory, ".*.upload-*")) == []
     end
   end
 

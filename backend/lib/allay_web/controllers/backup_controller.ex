@@ -4,6 +4,7 @@ defmodule AllayWeb.BackupController do
   alias Allay.Backups
   alias Allay.Servers
   alias AllayWeb.BackupJSON
+  alias AllayWeb.DownloadTicket
 
   action_fallback AllayWeb.FallbackController
 
@@ -61,8 +62,8 @@ defmodule AllayWeb.BackupController do
     scope = conn.assigns.current_scope
 
     with {:ok, _server} <- fetch_server(scope, server_id),
-         {:ok, path, filename} <- Backups.backup_file_path(scope, server_id, backup_id) do
-      send_download(conn, {:file, path}, filename: filename, content_type: "application/gzip")
+         {:ok, _path, _filename} <- Backups.backup_file_path(scope, server_id, backup_id) do
+      json(conn, %{downloadPath: DownloadTicket.issue(conn, {:backup, server_id, backup_id})})
     end
   end
 

@@ -15,8 +15,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '@/hooks/useBackups'
-import { backendFetch as fetch } from '@/lib/backend'
-import { useAuthStore } from '@/stores'
+import { getAuthHeaders } from '@/lib/api'
+import { backendUrl, backendFetch as fetch } from '@/lib/backend'
 
 interface BackupListProps {
   serverId: string
@@ -96,20 +96,18 @@ export function BackupList({ serverId }: BackupListProps) {
 
   const handleDownloadBackup = async (backupId: string, filename: string) => {
     try {
-      const token = useAuthStore.getState().token
       const res = await fetch(`/api/backups/${serverId}/${backupId}/download`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        method: 'POST',
+        headers: getAuthHeaders(),
       })
       if (res.ok) {
-        const blob = await res.blob()
-        const url = window.URL.createObjectURL(blob)
+        const { downloadPath } = (await res.json()) as { downloadPath: string }
         const a = document.createElement('a')
-        a.href = url
+        a.href = backendUrl(downloadPath)
         a.download = filename
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        window.URL.revokeObjectURL(url)
       } else {
         const data = await res.json()
         toast.error(data.error || 'Failed to download backup')

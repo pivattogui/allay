@@ -1,22 +1,19 @@
 defmodule AllayWeb.ImportController do
   use AllayWeb, :controller
 
-  require Logger
-
   alias Allay.Servers
+  alias AllayWeb.UploadStream
 
   action_fallback AllayWeb.FallbackController
 
   @allowed_extensions ~w(.zip .tar.gz .tgz)
-  @upload_chunk_bytes 1_000_000
-
   def analyze(conn, %{"server_id" => server_id}) do
     scope = conn.assigns.current_scope
 
     with {:ok, filename} <- fetch_filename(conn),
          :ok <- validate_extension(filename),
          {:ok, import_id, dest} <- imports(Servers.begin_import(scope, server_id, filename)),
-         {:ok, conn} <- stream_body(conn, dest, import_id),
+         {:ok, conn, _size} <- upload_archive(conn, dest, import_id),
          {:ok, analysis} <- Servers.analyze_import(import_id) do
       json(conn, %{
         importId: import_id,
@@ -49,45 +46,14 @@ defmodule AllayWeb.ImportController do
     end
   end
 
-  defp stream_body(conn, dest, import_id) do
-    file = File.open!(dest, [:write, :binary])
+  defp upload_archive(conn, dest, import_id) do
+    case UploadStream.write(conn, dest) do
+      {:ok, _conn, _size} = success ->
+        success
 
-    result =
-      try do
-        write_chunks(conn, file)
-      rescue
-        e -> {:error, {:upload_failed, Exception.message(e)}}
-      after
-        File.close(file)
-      end
-
-    case result do
-      {:ok, conn} ->
-        {:ok, conn}
-
-      {:error, reason} ->
+      error ->
         Servers.discard_import(import_id)
-        Logger.warning("import upload failed: #{inspect(reason)}")
-        {:error, {:upload_failed, normalize_reason(reason)}}
-    end
-  end
-
-  defp normalize_reason({:upload_failed, reason}), do: reason
-  defp normalize_reason(reason), do: reason
-
-  defp write_chunks(conn, file) do
-    # large read_length minimizes socket recvs on multi-GB uploads
-    case Plug.Conn.read_body(conn, length: @upload_chunk_bytes, read_length: @upload_chunk_bytes) do
-      {:ok, chunk, conn} ->
-        IO.binwrite(file, chunk)
-        {:ok, conn}
-
-      {:more, chunk, conn} ->
-        IO.binwrite(file, chunk)
-        write_chunks(conn, file)
-
-      {:error, reason} ->
-        {:error, reason}
+        error
     end
   end
 

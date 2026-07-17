@@ -85,6 +85,21 @@ defmodule AllayWeb.ImportControllerTest do
       dest = Path.join([data_dir, "temp", "import-#{body["importId"]}", "My World.zip"])
       assert File.read!(dest) == bytes
     end
+
+    test "413 rejects an archive over the configured limit and removes its session", %{
+      conn: conn,
+      data_dir: data_dir
+    } do
+      server = seeded_server(data_dir)
+      previous = Application.fetch_env!(:allay, :max_upload_bytes)
+      Application.put_env(:allay, :max_upload_bytes, 4)
+      on_exit(fn -> Application.put_env(:allay, :max_upload_bytes, previous) end)
+
+      resp = post_archive(conn, server.id, "12345", "large.zip")
+
+      assert %{"code" => "UPLOAD_TOO_LARGE"} = json_response(resp, 413)
+      assert Path.wildcard(Path.join([data_dir, "temp", "import-*"])) == []
+    end
   end
 
   describe "POST /api/backups/:server_id/import/:import_id/execute" do

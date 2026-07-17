@@ -64,8 +64,8 @@ defmodule AllayWeb.Router do
     put "/:id/files/write/*path", ServerFileController, :write
     post "/:id/files/mkdir/*path", ServerFileController, :mkdir
     post "/:id/files/rename", ServerFileController, :rename
-    get "/:id/files/download/*path", ServerFileController, :download
-    post "/:id/files/upload", ServerFileController, :upload
+    post "/:id/files/download/*path", ServerFileController, :download
+    put "/:id/files/upload/*path", ServerFileController, :upload
     delete "/:id/files/*path", ServerFileController, :delete
   end
 
@@ -80,8 +80,12 @@ defmodule AllayWeb.Router do
     post "/:server_id/import/:import_id/execute", ImportController, :execute
 
     post "/:serverId/:backupId/restore", BackupController, :restore
-    get "/:serverId/:backupId/download", BackupController, :download
+    post "/:serverId/:backupId/download", BackupController, :download
     delete "/:serverId/:backupId", BackupController, :delete
+  end
+
+  scope "/api/downloads", AllayWeb do
+    get "/:token", DownloadController, :show
   end
 
   scope "/api/system", AllayWeb do

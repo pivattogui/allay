@@ -30,6 +30,14 @@ interface UploadFile {
   error?: string
 }
 
+function encodedFilePath(path: string): string {
+  return path
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+}
+
 function formatSize(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -115,62 +123,76 @@ export function FileUploader({
     if (files.length === 0) return
 
     setIsUploading(true)
+    let uploadedCount = 0
 
-    const formData = new FormData()
-    files.forEach(({ file }) => {
-      formData.append('files', file)
-    })
-
-    // Mark all as uploading
-    setFiles((prev) => prev.map((f) => ({ ...f, status: 'uploading' as const })))
-
-    try {
-      const url = new URL(backendUrl(`/api/servers/${serverId}/files/upload`), window.location.origin)
-      if (currentPath) {
-        url.searchParams.set('path', currentPath)
-      }
-
-      const res = await fetch(url.toString(), {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData,
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        setFiles((prev) => prev.map((f) => ({ ...f, status: 'success' as const })))
-        toast.success(`Uploaded ${data.count} file(s)`)
-
-        // Close after a short delay to show success state
-        setTimeout(() => {
-          onOpenChange(false)
-          clearFiles()
-          onUploadComplete()
-        }, 1000)
-      } else {
-        const err = await res.json()
-        setFiles((prev) =>
-          prev.map((f) => ({
-            ...f,
-            status: 'error' as const,
-            error: err.error || 'Upload failed',
-          })),
-        )
-        toast.error(err.error || 'Failed to upload files')
-      }
-    } catch (_err) {
+    for (const [index, { file }] of files.entries()) {
       setFiles((prev) =>
-        prev.map((f) => ({
-          ...f,
-          status: 'error' as const,
-          error: 'Network error',
-        })),
+        prev.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, status: 'uploading', progress: 0, error: undefined } : item,
+        ),
       )
-      toast.error('Failed to upload files')
-    } finally {
-      setIsUploading(false)
+
+      try {
+        await uploadFile(file, index)
+        uploadedCount += 1
+        setFiles((prev) =>
+          prev.map((item, itemIndex) => (itemIndex === index ? { ...item, status: 'success', progress: 100 } : item)),
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Upload failed'
+        setFiles((prev) =>
+          prev.map((item, itemIndex) => (itemIndex === index ? { ...item, status: 'error', error: message } : item)),
+        )
+      }
+    }
+
+    setIsUploading(false)
+    if (uploadedCount > 0) onUploadComplete()
+
+    if (uploadedCount === files.length) {
+      toast.success(`Uploaded ${uploadedCount} file(s)`)
+      setTimeout(() => {
+        onOpenChange(false)
+        clearFiles()
+      }, 1000)
+    } else {
+      toast.error(`Failed to upload ${files.length - uploadedCount} file(s)`)
     }
   }
+
+  const uploadFile = (file: File, index: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const target = encodedFilePath([currentPath, file.name].filter(Boolean).join('/'))
+      const xhr = new XMLHttpRequest()
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (!event.lengthComputable) return
+        const progress = Math.round((event.loaded / event.total) * 100)
+        setFiles((prev) => prev.map((item, itemIndex) => (itemIndex === index ? { ...item, progress } : item)))
+      })
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+          return
+        }
+
+        try {
+          const response = JSON.parse(xhr.responseText) as { error?: string }
+          reject(new Error(response.error || 'Upload failed'))
+        } catch {
+          reject(new Error('Upload failed'))
+        }
+      })
+      xhr.addEventListener('error', () => reject(new Error('Network error')))
+      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+
+      xhr.open('PUT', backendUrl(`/api/servers/${serverId}/files/upload/${target}`))
+      new Headers(getAuthHeaders()).forEach((value, key) => {
+        xhr.setRequestHeader(key, value)
+      })
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+      xhr.send(file)
+    })
 
   const handleClose = () => {
     if (!isUploading) {
@@ -230,7 +252,9 @@ export function FileUploader({
                     <X className="h-4 w-4" />
                   </Button>
                 )}
-                {item.status === 'uploading' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {item.status === 'uploading' && (
+                  <span className="text-xs text-primary tabular-nums">{item.progress ?? 0}%</span>
+                )}
                 {item.status === 'success' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                 {item.status === 'error' && <AlertCircle className="h-4 w-4 text-destructive" />}
               </div>

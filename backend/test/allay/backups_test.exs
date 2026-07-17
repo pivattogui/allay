@@ -42,6 +42,19 @@ defmodule Allay.BackupsTest do
   # tolerates as success).
   defp failing_tar, do: Path.expand("../support/fake_tar_fail.sh", __DIR__)
 
+  defp recording_tar(data_dir) do
+    arguments_path = Path.join(data_dir, "tar-arguments")
+    wrapper_path = Path.join(data_dir, "recording-tar")
+
+    File.write!(
+      wrapper_path,
+      "#!/bin/sh\nprintf '%s\\n' \"$@\" > #{arguments_path}\nexec tar \"$@\"\n"
+    )
+
+    File.chmod!(wrapper_path, 0o755)
+    {wrapper_path, arguments_path}
+  end
+
   defp untar_to_scratch(archive_path) do
     scratch = Path.join(System.tmp_dir!(), "scratch_#{System.unique_integer([:positive])}")
     File.mkdir_p!(scratch)
@@ -103,6 +116,21 @@ defmodule Allay.BackupsTest do
       ts = String.replace_suffix(ts, ".tar.gz", "")
       refute String.contains?(ts, ":")
       refute String.contains?(ts, ".")
+    end
+
+    test "uses gzip level 1 and produces an extractable archive" do
+      {scope, server, data_dir} = seed_server()
+      {tar_command, arguments_path} = recording_tar(data_dir)
+
+      assert {:ok, backup} =
+               Backups.create_backup(scope, server.id, "manual",
+                 data_dir: data_dir,
+                 tar_cmd: tar_command
+               )
+
+      arguments = arguments_path |> File.read!() |> String.split("\n", trim: true)
+      assert "--use-compress-program=gzip -1" in arguments
+      assert File.dir?(untar_to_scratch(Path.join([data_dir, "backups", backup.filename])))
     end
   end
 

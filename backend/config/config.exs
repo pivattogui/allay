@@ -44,9 +44,10 @@ config :allay, :mc_port_range, 25_565..25_575
 # checks JAVA_HOME, PATH, installation managers, and platform locations.
 config :allay, :java_scan_dirs, ["/opt/java", "/usr/lib/jvm"]
 
-# Max upload size for server-import archives (read at compile time by the
-# endpoint's Plug.Parsers). Full world backups can be large; default 2 GiB.
-config :allay, :max_upload_bytes, 2 * 1024 * 1024 * 1024
+# Maximum size for server file uploads and import archives. Raw upload
+# controllers enforce this while streaming so request bodies never accumulate
+# in BEAM memory.
+config :allay, :max_upload_bytes, 25 * 1024 * 1024 * 1024
 
 config :allay, Oban,
   engine: Oban.Engines.Basic,

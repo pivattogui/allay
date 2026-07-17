@@ -98,9 +98,14 @@ defmodule Allay.Servers do
     Files.download_path(scope, server_id, relative_path)
   end
 
-  @doc "Stores uploaded files within a server's sandboxed filesystem."
-  def save_uploads(%Scope{} = scope, server_id, relative_path, uploads) do
-    Files.save_uploads(scope, server_id, relative_path, uploads)
+  @doc "Prepares a temporary path for a streamed server file upload."
+  def prepare_upload(%Scope{} = scope, server_id, relative_path) do
+    Files.prepare_upload(scope, server_id, relative_path)
+  end
+
+  @doc "Atomically commits a streamed server file upload."
+  def commit_upload(%Scope{} = scope, server_id, relative_path, temporary, size) do
+    Files.commit_upload(scope, server_id, relative_path, temporary, size)
   end
 
   @doc "Starts a staged archive import for a stopped server."

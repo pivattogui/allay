@@ -2,6 +2,8 @@ defmodule AllayWeb.ServerFileController do
   use AllayWeb, :controller
 
   alias Allay.Servers
+  alias AllayWeb.DownloadTicket
+  alias AllayWeb.UploadStream
 
   action_fallback AllayWeb.FallbackController
 
@@ -64,26 +66,20 @@ defmodule AllayWeb.ServerFileController do
     scope = conn.assigns.current_scope
     rel = Enum.join(path_segments, "/")
 
-    with {:ok, full, basename} <- files(Servers.download_path(scope, server_id, rel)) do
-      send_download(conn, {:file, full},
-        filename: basename,
-        content_type: "application/octet-stream"
-      )
+    with {:ok, _full, _basename} <- files(Servers.download_path(scope, server_id, rel)) do
+      json(conn, %{downloadPath: DownloadTicket.issue(conn, {:server_file, server_id, rel})})
     end
   end
 
-  def upload(conn, %{"id" => server_id} = params) do
+  def upload(conn, %{"id" => server_id, "path" => path_segments}) do
     scope = conn.assigns.current_scope
-    rel_dir = Map.get(conn.query_params, "path", "")
-    uploads = collect_uploads(params)
+    rel = Enum.join(path_segments, "/")
 
-    with {:ok, %{uploaded: uploaded, count: count}} <-
-           files(Servers.save_uploads(scope, server_id, rel_dir, uploads)) do
-      json(conn, %{
-        success: true,
-        uploaded: Enum.map(uploaded, fn u -> %{name: u.name, size: u.size} end),
-        count: count
-      })
+    with {:ok, %{temporary: temporary}} <- files(Servers.prepare_upload(scope, server_id, rel)),
+         {:ok, conn, size} <- UploadStream.write(conn, temporary),
+         {:ok, %{path: path}} <-
+           commit_upload(scope, server_id, rel, temporary, size) do
+      json(conn, %{success: true, path: path, size: size})
     end
   end
 
@@ -113,17 +109,15 @@ defmodule AllayWeb.ServerFileController do
 
   defp require_paths(_params), do: {:error, :paths_required}
 
-  # Flat-scan all param values for %Plug.Upload{} structs, including inside lists.
-  # The legacy frontend submits repeated `files` fields which Plug parses as a
-  # list under the "files" key.
-  defp collect_uploads(params) do
-    params
-    |> Map.values()
-    |> Enum.flat_map(fn
-      %Plug.Upload{} = u -> [u]
-      list when is_list(list) -> Enum.filter(list, &match?(%Plug.Upload{}, &1))
-      _ -> []
-    end)
+  defp commit_upload(scope, server_id, rel, temporary, size) do
+    case files(Servers.commit_upload(scope, server_id, rel, temporary, size)) do
+      {:ok, _info} = success ->
+        success
+
+      error ->
+        File.rm(temporary)
+        error
+    end
   end
 
   # Omit nil extension/editable/sensitive/fileType keys for directories (legacy:

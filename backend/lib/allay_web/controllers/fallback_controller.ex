@@ -141,6 +141,10 @@ defmodule AllayWeb.FallbackController do
     error(conn, :not_found, "Backup file not found", "BACKUP_FILE_NOT_FOUND")
   end
 
+  def call(conn, {:error, :download_not_found}) do
+    error(conn, :not_found, "Download not found or expired", "DOWNLOAD_NOT_FOUND")
+  end
+
   def call(conn, {:error, :config_not_found}) do
     error(conn, :not_found, "Backup config not found", "CONFIG_NOT_FOUND")
   end
@@ -220,6 +224,10 @@ defmodule AllayWeb.FallbackController do
 
   def call(conn, {:error, {:upload_failed, _reason}}) do
     error(conn, :bad_request, "Upload failed", "UPLOAD_FAILED")
+  end
+
+  def call(conn, {:error, :upload_too_large}) do
+    error(conn, :request_entity_too_large, "Upload exceeds the 25 GiB limit", "UPLOAD_TOO_LARGE")
   end
 
   # ── File browser / editor errors (legacy code vocabulary) ───────────────────
@@ -310,7 +318,7 @@ defmodule AllayWeb.FallbackController do
   end
 
   def call(conn, {:error, :upload_error}) do
-    error(conn, :internal_server_error, "Failed to upload file(s)", "UPLOAD_ERROR")
+    error(conn, :internal_server_error, "Failed to upload file", "UPLOAD_ERROR")
   end
 
   defp error(conn, status, message, code) do

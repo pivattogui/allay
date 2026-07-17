@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getAuthHeaders } from '@/lib/api'
-import { backendFetch as fetch } from '@/lib/backend'
+import { backendUrl, backendFetch as fetch } from '@/lib/backend'
 import { FileBreadcrumb } from './FileBreadcrumb'
 import { FileEditor } from './FileEditor'
 import { FileTree } from './FileTree'
@@ -250,19 +250,18 @@ export function FileBrowser({ serverId }: FileBrowserProps) {
 
     try {
       const res = await fetch(`/api/servers/${serverId}/files/download/${filePath}`, {
+        method: 'POST',
         headers: getAuthHeaders(),
       })
 
       if (res.ok) {
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
+        const { downloadPath } = (await res.json()) as { downloadPath: string }
         const a = document.createElement('a')
-        a.href = url
+        a.href = backendUrl(downloadPath)
         a.download = entry.name
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        URL.revokeObjectURL(url)
       } else {
         const err = await res.json()
         toast.error(err.error || 'Failed to download')

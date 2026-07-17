@@ -34,7 +34,7 @@ defmodule Allay.Runtime.MetricsSampler do
       server_id: server_id,
       os_pid: Keyword.fetch!(opts, :os_pid),
       ram_max_mb: Keyword.fetch!(opts, :ram_max_mb),
-      interval_ms: Keyword.get(opts, :interval_ms, 5_000),
+      interval_ms: Keyword.get(opts, :interval_ms, 10_000),
       cores: Keyword.get(opts, :cores, System.schedulers_online()),
       ps_fun: Keyword.get(opts, :ps_fun, &default_ps/1),
       player_count: 0,

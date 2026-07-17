@@ -148,21 +148,57 @@ defmodule Allay.Servers.Files do
     end
   end
 
-  @doc """
-  Saves `uploads` (each `%{filename, path}`) into `rel_dir`, which is created if
-  missing. Only the client filename's basename is kept (kills traversal). Any
-  copy failure aborts the whole batch with `{:error, :upload_error}`.
-  """
-  def save_uploads(%Scope{} = scope, server_id, rel_dir, uploads) do
+  @doc "Prepares a same-directory temporary path for a streamed upload."
+  def prepare_upload(%Scope{} = scope, server_id, rel) do
     OperationLock.run(server_id, :file_write, fn ->
-      save_uploads_locked(scope, server_id, rel_dir, uploads)
+      prepare_upload_locked(scope, server_id, rel)
     end)
   end
 
-  defp save_uploads_locked(scope, server_id, rel_dir, uploads) do
-    with {:ok, target, _sanitized} <- resolve(scope, server_id, rel_dir),
-         :ok <- ensure_target_dir(target) do
-      copy_uploads(target, uploads)
+  defp prepare_upload_locked(scope, server_id, rel) do
+    with {:ok, full, sanitized} <- resolve(scope, server_id, rel) do
+      prepare_upload_path(full, sanitized)
+    end
+  end
+
+  defp prepare_upload_path(full, sanitized) do
+    cond do
+      sanitized == "" or File.dir?(full) ->
+        {:error, :is_directory}
+
+      File.mkdir_p(Path.dirname(full)) != :ok ->
+        {:error, :upload_error}
+
+      true ->
+        temporary =
+          Path.join(
+            Path.dirname(full),
+            ".#{Path.basename(full)}.upload-#{Ecto.UUID.generate()}"
+          )
+
+        {:ok, %{path: sanitized, temporary: temporary}}
+    end
+  end
+
+  @doc "Atomically promotes a completed streamed upload into place."
+  def commit_upload(%Scope{} = scope, server_id, rel, temporary, size) do
+    OperationLock.run(server_id, :file_write, fn ->
+      commit_upload_locked(scope, server_id, rel, temporary, size)
+    end)
+  end
+
+  defp commit_upload_locked(scope, server_id, rel, temporary, size) do
+    with {:ok, full, sanitized} <- resolve(scope, server_id, rel) do
+      promote_upload(temporary, full, sanitized, size)
+    end
+  end
+
+  defp promote_upload(temporary, full, sanitized, size) do
+    if Path.dirname(temporary) == Path.dirname(full) and File.regular?(temporary) and
+         File.rename(temporary, full) == :ok do
+      {:ok, %{path: sanitized, size: size}}
+    else
+      {:error, :upload_error}
     end
   end
 
@@ -309,33 +345,6 @@ defmodule Allay.Servers.Files do
       {:ok, %{old_path: old_san, new_path: new_san}}
     else
       _ -> {:error, :rename_error}
-    end
-  end
-
-  defp ensure_target_dir(target) do
-    cond do
-      File.dir?(target) -> :ok
-      File.exists?(target) -> {:error, :not_a_directory}
-      match?(:ok, File.mkdir_p(target)) -> :ok
-      true -> {:error, :upload_error}
-    end
-  end
-
-  defp copy_uploads(target, uploads) do
-    result =
-      Enum.reduce_while(uploads, [], fn upload, acc ->
-        name = Path.basename(upload.filename)
-        dest = Path.join(target, name)
-
-        case File.cp(upload.path, dest) do
-          :ok -> {:cont, [%{name: name, size: File.stat!(dest).size} | acc]}
-          {:error, _} -> {:halt, :error}
-        end
-      end)
-
-    case result do
-      :error -> {:error, :upload_error}
-      uploaded -> {:ok, %{uploaded: Enum.reverse(uploaded), count: length(uploaded)}}
     end
   end
 end

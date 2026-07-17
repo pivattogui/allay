@@ -28,7 +28,7 @@ defmodule Allay.Runtime.LogWatcher do
     state = %{
       server_id: Keyword.fetch!(opts, :server_id),
       path: path,
-      poll_ms: Keyword.get(opts, :poll_ms, 200),
+      poll_ms: Keyword.get(opts, :poll_ms, 500),
       # Start at the current end of the file so the panel does not replay the
       # previous session's log on open; only lines written from now on stream.
       offset: current_size(path),
