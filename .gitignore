@@ -43,3 +43,9 @@ data/
 CLAUDE.md
 
 docs/
+!docs/
+docs/*
+!docs/readme/
+docs/readme/*
+!docs/readme/assets/
+!docs/readme/assets/*
