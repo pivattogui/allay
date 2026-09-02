@@ -48,6 +48,8 @@ defmodule AllayWeb.ServerIconController do
   defp validate_image_type(%Plug.Upload{content_type: "image/" <> _}), do: :ok
   defp validate_image_type(_upload), do: {:error, :invalid_file_type}
 
+  # Plug creates the multipart temporary path; clients cannot provide this filesystem path directly.
+  # sobelow_skip ["Traversal.FileModule"]
   defp read_within_limit(%Plug.Upload{path: path}) do
     case File.stat(path) do
       {:ok, %File.Stat{size: size}} when size > @max_bytes -> {:error, :file_too_large}

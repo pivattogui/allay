@@ -63,7 +63,8 @@ defmodule Allay.MixProject do
       {:crontab, "~> 1.1"},
       {:dotenvy, "~> 1.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -84,6 +85,7 @@ defmodule Allay.MixProject do
         "compile --warnings-as-errors",
         "format --check-formatted",
         "credo --strict",
+        "sobelow --config",
         "dialyzer",
         "test"
       ]

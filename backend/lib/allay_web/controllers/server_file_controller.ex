@@ -109,6 +109,8 @@ defmodule AllayWeb.ServerFileController do
 
   defp require_paths(_params), do: {:error, :paths_required}
 
+  # `temporary` is generated beside the sandboxed target and revalidated by `Servers.commit_upload/5`.
+  # sobelow_skip ["Traversal.FileModule"]
   defp commit_upload(scope, server_id, rel, temporary, size) do
     case files(Servers.commit_upload(scope, server_id, rel, temporary, size)) do
       {:ok, _info} = success ->

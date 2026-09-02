@@ -33,6 +33,8 @@ defmodule AllayWeb.DownloadController do
 
   defp send_resource(_conn, _resource), do: {:error, :download_not_found}
 
+  # `path` is resolved by the authorized server or backup context before it reaches this boundary.
+  # sobelow_skip ["Traversal.SendDownload"]
   defp send_file_download(conn, path, filename, content_type) do
     conn
     |> put_resp_header("cache-control", "no-store")
